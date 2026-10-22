@@ -17,9 +17,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import threading
 import socket
 import struct
+import threading
 
 from gi.repository import GLib
 
@@ -196,23 +196,16 @@ class OSCServer:
     # OSC command handlers
 
     def handle_load_file(self, args, addr):
-        """Load text file: /teleprompter/load [string path]"""
+        """Load a text or SRT file: /teleprompter/load [string path]"""
         if not args:
             self._send_response(addr, "/teleprompter/error", "Missing file path")
             return
 
         file_path = args[0]
         try:
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read()
-                self.window.text_buffer.set_text(content)
-                self.window.apply_text_tags()
-                self.window.update_font()
-                start = self.window.text_buffer.get_start_iter()
-                self.window.search_and_mark_highlight(start)
-
-                self._show_toast(f"Loaded file: {file_path}")
-                self._send_response(addr, "/teleprompter/loaded", file_path)
+            self.window.load_file(file_path)
+            self._show_toast(f"Loaded file: {file_path}")
+            self._send_response(addr, "/teleprompter/loaded", file_path)
         except Exception as e:
             error_msg = f"Failed to load file: {str(e)}"
             self._show_toast(error_msg)
@@ -225,11 +218,7 @@ class OSCServer:
             return
 
         text_content = args[0]
-        self.window.text_buffer.set_text(text_content)
-        self.window.apply_text_tags()
-        self.window.update_font()
-        start = self.window.text_buffer.get_start_iter()
-        self.window.search_and_mark_highlight(start)
+        self.window.set_plain_text(text_content)
 
         self._show_toast("Text updated via OSC")
         self._send_response(addr, "/teleprompter/text_set", len(text_content))
@@ -245,20 +234,14 @@ class OSCServer:
     def handle_pause(self, args, addr):
         """Pause playback: /teleprompter/pause"""
         if self.window.playing:
-            self.window.play()  # Переключает состояние
+            self.window.pause()
             self._send_response(addr, "/teleprompter/paused")
         else:
             self._send_response(addr, "/teleprompter/already_paused")
 
     def handle_stop(self, args, addr):
         """Stop playback and reset position: /teleprompter/stop"""
-        if self.window.playing:
-            self.window.play()  # Stop if playing
-
-        # Reset position to beginning
-        adjustment = self.window.scrolled_window.get_vadjustment()
-        adjustment.set_value(0)
-
+        self.window.reset_playback()
         self._send_response(addr, "/teleprompter/stopped")
 
     def handle_set_speed(self, args, addr):
@@ -270,14 +253,15 @@ class OSCServer:
         try:
             speed = float(args[0])
             if 10 <= speed <= 500:  # Reasonable limits
-                self.window.settings.speed = speed
+                self.window.set_playback_speed(speed)
                 self._send_response(addr, "/teleprompter/speed_set", speed)
             else:
                 self._send_response(
                     addr, "/teleprompter/error", "Speed must be between 10-500 WPM"
                 )
-        except ValueError:
-            self._send_response(addr, "/teleprompter/error", "Invalid speed value")
+        except (TypeError, ValueError) as error:
+            message = str(error) if self.window.is_srt_mode else "Invalid speed value"
+            self._send_response(addr, "/teleprompter/error", message)
 
     def handle_set_fontsize(self, args, addr):
         """Set font size: /teleprompter/fontsize [int size]"""
@@ -288,26 +272,17 @@ class OSCServer:
         try:
             size = int(args[0])
             if 10 <= size <= 200:  # Reasonable limits
-                font_properties = self.window.settings.font.split()
-                font_properties[-1] = str(size)
-                self.window.settings.font = " ".join(font_properties)
-
-                self.window.update_font()
-                self.window.apply_text_tags()
-                start = self.window.text_buffer.get_start_iter()
-                self.window.search_and_mark_highlight(start)
-                self.window.save_app_settings(self.window.settings)
-
+                self.window.set_font_size(size)
                 self._send_response(addr, "/teleprompter/fontsize_set", size)
             else:
                 self._send_response(
                     addr, "/teleprompter/error", "Font size must be between 10-200"
                 )
-        except ValueError:
+        except (TypeError, ValueError):
             self._send_response(addr, "/teleprompter/error", "Invalid font size")
 
     def handle_set_position(self, args, addr):
-        """Set scroll position: /teleprompter/position [float 0.0-1.0]"""
+        """Set scroll or SRT time position: /teleprompter/position [float 0.0-1.0]"""
         if not args:
             self._send_response(addr, "/teleprompter/error", "Missing position value")
             return
@@ -315,17 +290,13 @@ class OSCServer:
         try:
             position = float(args[0])
             if 0.0 <= position <= 1.0:
-                adjustment = self.window.scrolled_window.get_vadjustment()
-                max_value = adjustment.get_upper() - adjustment.get_page_size()
-                new_value = max_value * position
-                adjustment.set_value(new_value)
-
+                self.window.seek_fraction(position)
                 self._send_response(addr, "/teleprompter/position_set", position)
             else:
                 self._send_response(
                     addr, "/teleprompter/error", "Position must be between 0.0-1.0"
                 )
-        except ValueError:
+        except (TypeError, ValueError):
             self._send_response(addr, "/teleprompter/error", "Invalid position value")
 
     def handle_fullscreen(self, args, addr):
@@ -346,69 +317,35 @@ class OSCServer:
 
     def handle_hmirror(self, args, addr):
         """Horizontal mirroring: /teleprompter/mirror/horizontal [bool]"""
-        if args:
-            mirror = bool(args[0])
-            self.window.scroll_text_view.hmirror = mirror
-            app = self.window.get_application()
-            app.hmirror_action.set_state(GLib.Variant.new_boolean(mirror))
-            app.saved_settings.set_boolean("hmirror", mirror)
-        else:
-            # Toggle state
-            current = self.window.scroll_text_view.hmirror
-            self.window.scroll_text_view.hmirror = not current
-
-        self._send_response(
-            addr, "/teleprompter/hmirror", self.window.scroll_text_view.hmirror
+        mirror = (
+            bool(args[0]) if args else not self.window.settings.get_boolean("hmirror")
         )
+        self.window.settings.set_boolean("hmirror", mirror)
+        self._send_response(addr, "/teleprompter/hmirror", mirror)
 
     def handle_vmirror(self, args, addr):
         """Vertical mirroring: /teleprompter/mirror/vertical [bool]"""
-        if args:
-            mirror = bool(args[0])
-            self.window.scroll_text_view.vmirror = mirror
-            app = self.window.get_application()
-            app.vmirror_action.set_state(GLib.Variant.new_boolean(mirror))
-            app.saved_settings.set_boolean("vmirror", mirror)
-        else:
-            # Toggle state
-            current = self.window.scroll_text_view.vmirror
-            self.window.scroll_text_view.vmirror = not current
-
-        self._send_response(
-            addr, "/teleprompter/vmirror", self.window.scroll_text_view.vmirror
+        mirror = (
+            bool(args[0]) if args else not self.window.settings.get_boolean("vmirror")
         )
+        self.window.settings.set_boolean("vmirror", mirror)
+        self._send_response(addr, "/teleprompter/vmirror", mirror)
 
     def handle_reset(self, args, addr):
         """Reset mirroring and position: /teleprompter/reset"""
-        # Reset mirroring
-        self.window.scroll_text_view.hmirror = False
-        self.window.scroll_text_view.vmirror = False
-
-        app = self.window.get_application()
-        app.vmirror_action.set_state(GLib.Variant.new_boolean(False))
-        app.hmirror_action.set_state(GLib.Variant.new_boolean(False))
-
-        # Reset position
-        adjustment = self.window.scrolled_window.get_vadjustment()
-        adjustment.set_value(0)
-
-        # Stop playback
-        if self.window.playing:
-            self.window.play()
-
+        self.window.settings.set_boolean("hmirror", False)
+        self.window.settings.set_boolean("vmirror", False)
+        self.window.reset_playback()
         self._send_response(addr, "/teleprompter/reset_complete")
 
     def handle_get_status(self, args, addr):
         """Get current status: /teleprompter/status"""
-        adjustment = self.window.scrolled_window.get_vadjustment()
-        max_value = adjustment.get_upper() - adjustment.get_page_size()
-        position = adjustment.get_value() / max_value if max_value > 0 else 0
+        position = self.window.playback_fraction
+        speed = 0 if self.window.is_srt_mode else self.window.settings.get_int("speed")
 
         # Send detailed status
         self._send_response(addr, "/teleprompter/status/playing", self.window.playing)
-        self._send_response(
-            addr, "/teleprompter/status/speed", self.window.settings.speed
-        )
+        self._send_response(addr, "/teleprompter/status/speed", speed)
         self._send_response(addr, "/teleprompter/status/position", position)
         self._send_response(
             addr, "/teleprompter/status/fullscreen", self.window.is_fullscreen()

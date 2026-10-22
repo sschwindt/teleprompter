@@ -1,0 +1,28 @@
+1
+00:00:02,000 --> 00:00:06,000
+Welcome to this timed teleprompter demonstration.
+
+2
+00:00:06,000 --> 00:00:10,000
+This cue has two lines.
+Read both lines exactly as written.
+
+3
+00:00:13,000 --> 00:00:17,000
+There was a three-second gap before this cue.
+
+4
+00:00:17,000 --> 00:00:21,000
+Unicode works: Grüße, café, Ελληνικά, 日本語.
+
+5
+00:00:21,000 --> 00:00:26,000
+<i>This cue is formatted.</i> A &amp; B stay readable.
+
+6
+00:00:24,000 --> 00:00:28,000
+This cue overlaps the previous one for two seconds.
+
+7
+00:00:30,000 --> 00:00:34,000
+The final cue ends at thirty-four seconds.

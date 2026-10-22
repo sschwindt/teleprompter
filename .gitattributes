@@ -1,0 +1,2 @@
+# Linux executes this configured file directly; its shebang must end with LF.
+/src/teleprompter.in text eol=lf

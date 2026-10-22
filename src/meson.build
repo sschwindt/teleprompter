@@ -42,6 +42,8 @@ teleprompter_sources = [
   '__init__.py',
   'main.py',
   'window.py',
+  'srt.py',
+  'timeline.py',
   'preferences.py',
   'scroll_text_view.py',
   'osc_server.py'

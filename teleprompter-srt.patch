@@ -1,0 +1,2840 @@
+diff --git a/.buildconfig b/.buildconfig
+index e2e03b5..0a58b1e 100644
+--- a/.buildconfig
++++ b/.buildconfig
+@@ -1,6 +1,6 @@
+ [default]
+ name=Default
+-runtime=flatpak:org.gnome.Platform/x86_64/44
++runtime=flatpak:org.gnome.Platform/x86_64/49
+ toolchain=default
+ config-opts=
+ run-opts=
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+new file mode 100644
+index 0000000..346a935
+--- /dev/null
++++ b/.github/workflows/tests.yml
+@@ -0,0 +1,14 @@
++name: Python tests
++
++on: [push, pull_request]
++
++jobs:
++  tests:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: '3.11'
++      - run: python -m unittest discover -s tests -v
++      - run: python -m compileall -q src tests
+diff --git a/.gitignore b/.gitignore
+index 369b757..721f5d8 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2,6 +2,9 @@ _build/
+ builddir/
+ .flatpak/
+ node_modules/
++__pycache__/
++*.py[cod]
++.ruff_cache/
+ 
+ # local flatpak build
+ /repo
+@@ -12,4 +15,4 @@ node_modules/
+ 
+ # OSC test
+ 
+-test_osc.py
+\ No newline at end of file
++test_osc.py
+diff --git a/README.md b/README.md
+index c376e68..153dcc7 100644
+--- a/README.md
++++ b/README.md
+@@ -1,40 +1,162 @@
+-<img height="128" src="data/icons/hicolor/scalable/apps/io.github.nokse22.teleprompter.svg" align="left"/> 
+-  
+- # Teleprompter 
+-  [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+-  [![made-with-python](https://img.shields.io/badge/Made%20with-Python-ff7b3f.svg)](https://www.python.org/)
+-  [![Downloads](https://img.shields.io/badge/dynamic/json?color=brightgreen&label=Flathub%20Downloads&query=%24.installs_total&url=https%3A%2F%2Fflathub.org%2Fapi%2Fv2%2Fstats%2Fio.github.nokse22.teleprompter)](https://flathub.org/apps/details/io.github.nokse22.teleprompter)
++# Teleprompter with timed SRT playback
+ 
+-  
+-<p>
+-A simple Gtk4 app to read scrolling text from your screen, written in python.
+-  
+-  Has an adaptive layout that let you use it on smartphone too.
+-  </p>
+-  <div align="center">
+-  <img src="data/resources/screenshot 1.png" max-height="400"/>
+-  <img src="data/resources/screenshot 3.png" max-height="400"/>
+-  </div>
+-  
+-  
+-</div>
++This fork of [Nokse22/teleprompter](https://github.com/Nokse22/teleprompter)
++adds playback of SubRip (`.srt`) files. It displays the script using the file's
++original cue times, with the current cue in large, bold text and the upcoming
++cue in a smaller preview. Ordinary scrolling text is also supported.
+ 
+-## Installation
++## Build and launch this fork
+ 
+-### From the stores
++The upstream Flathub download does not include this fork's changes. Build this
++checkout to use SRT playback.
+ 
+-Teleprompter is available to download on Flathub.
++### Linux Mint: build with Flatpak Builder
+ 
+-<a href='https://flathub.org/apps/details/io.github.nokse22.teleprompter'><img width='240' alt='Download on Flathub' src='https://flathub.org/assets/badges/flathub-badge-en.png'></a>
++You need Git, Flatpak, and Flatpak Builder. On Mint, install any missing tools:
+ 
+-### From source
++```sh
++sudo apt install git flatpak flatpak-builder
++```
++
++Configure Flathub for your user account if needed, then clone the fork:
++
++```sh
++flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
++git clone https://github.com/sschwindt/teleprompter.git
++cd teleprompter
++```
++
++If you already have this checkout, use its project directory. Build and install:
++
++```sh
++flatpak-builder --user --install-deps-from=flathub --install builddir io.github.nokse22.teleprompter.json
++flatpak run io.github.nokse22.teleprompter
++```
++
++The manifest uses the **GNOME 49 SDK/runtime**. Flatpak Builder can install these
++dependencies from Flathub. This avoids relying on Mint's system GTK/libadwaita
++versions for the app's recent widgets.
++
++Use an empty `builddir` for the first build. For subsequent builds, add
++`--force-clean` to the `flatpak-builder` command to replace that build directory.
++
++### Alternative: GNOME Builder
++
++Open this project folder in GNOME Builder, select its Flatpak build
++configuration, and click **Run Project**. Allow Builder to install the GNOME 49
++SDK/runtime if prompted.
++
++## Play an SRT file
++
++1. Launch the app.
++2. Click the **folder button** or press **Ctrl+O**, then select your `.srt` file.
++   To try the included example, choose [examples/timed-demo.srt](examples/timed-demo.srt).
++3. The file opens **paused at 00:00:00.000**, with its timing offset set to zero.
++   The smaller **Up next** preview lets you prepare for the first cue.
++4. Click **Play** or press **Ctrl+Space**. The timeline starts at zero and each
++   cue becomes active at its SRT start time.
++5. Press **Ctrl+Space** again to pause. Press it once more to resume from the
++   same position.
++6. Playback stops at the last cue's end. Press **Play** again to start over.
++
++Open the file through the app's file chooser; passing an SRT filename to the
++launch command is not currently supported.
++
++### What you see
++
++- **Current cue:** large, bold text, visible from its start time until its end time.
++- **Up next:** the next cue in smaller text. This preview is visible before that
++  cue's start time, including during gaps.
++- **Status and timeline:** playback state, elapsed/total time, and the current
++  cue number or a countdown to the next cue.
++
++When cues overlap, all active cues appear together in their original file order.
++When a cue ends, its current-cue text clears; during a gap, the next-cue preview
++remains available.
+ 
+-You just need to clone the repository
++### Controls
++
++| Control | Action |
++| --- | --- |
++| **Ctrl+O** / folder button | Open an SRT or text file. |
++| **Ctrl+Space** / Play button | Play or pause. |
++| **Timeline slider** | Seek to a different time. |
++| **Alt+Left** / previous button | Jump to the preceding cue start; from inside a cue, return to that cue's start first. |
++| **Alt+Right** / next button | Jump to the next cue's start. |
++| **Ctrl+Home** / restart button | Pause and return to zero. |
++| **Offset (s)** | Shift when cues appear, in steps of 0.1 seconds. |
++| **Font buttons / Preferences** | Adjust readability without changing cue timing. |
++| **F11** | Toggle fullscreen. |
++
++Seeking and cue navigation preserve the playing/paused state unless you reach
++the end of the script.
++
++### Adjust the timing offset
++
++Positive offsets show cues **later**; negative offsets show them **earlier**.
++For example, a cue beginning at 5 seconds appears at 7 seconds with an offset of
++`+2.0`, or at 3 seconds with an offset of `-2.0`.
++
++Changing the offset shifts the cue schedule without moving the current timeline
++position or editing the file. A negative offset can move initial cues before
++zero, so those cues may be partly or completely skipped. Restart retains the
++offset; opening another SRT resets it to zero.
++
++## SRT format and text handling
++
++A simple file looks like this. Leave a blank line between cues:
++
++```srt
++1
++00:00:02,000 --> 00:00:05,000
++Welcome to the lecture.
++
++2
++00:00:06,000 --> 00:00:10,000
++This cue contains
++two lines of text.
++```
++
++UTF-8, UTF-8 with a BOM, and UTF-16 with a BOM are supported. Save files in other
++encodings as UTF-8 before opening them. Invalid files produce an error identifying
++the cue/line where possible and leave the current document and playback intact.
++
++The app preserves Unicode, wording, and multiline cues. Common presentation tags
++(`<b>`, `<i>`, `<u>`, `<s>`, and `<font>`) are hidden in the display,
++`<br>` becomes a line break, and HTML entities such as `&amp;` display as
++characters. The source file is never modified.
++
++SRT playback runs at **1×**. Font size, window size, mirroring, and the normal
++reading-speed setting do not affect the timestamps. The app uses elapsed
++monotonic time to avoid accumulating drift when UI updates run late; visible
++updates occur approximately every 20 ms while playing.
++
++The displayed SRT text is read-only. To change the wording or timestamps, edit
++the source file separately and reopen it.
++
++## Return to ordinary scrolling text
++
++Open a normal text file or click **Paste from Clipboard**. This returns to
++editable, speed-based scrolling. Clipboard paste always uses plain-text mode;
++open an SRT file to activate timed playback.
++
++## Run the automated checks
++
++The parser, timeline, and controller tests use Python's standard library. They
++can run without GTK, a display server, or extra Python packages:
+ 
+ ```sh
+-git clone https://github.com/Nokse22/teleprompter.git
++python3 -m unittest discover -s tests -v
++python3 -m compileall -q src tests
++git diff --check
+ ```
+ 
+-Open the project in GNOME Builder and click "Run Project".
++The controller tests use GTK test doubles. Run the actual Flatpak app to check
++widget layout and rendering on your Linux desktop.
++
++## Upstream and license
++
++Based on [Nokse22/teleprompter](https://github.com/Nokse22/teleprompter).
++See [COPYING](COPYING) and [LICENSE](LICENSE) for license information.
+ 
+ 
+diff --git a/examples/timed-demo.srt b/examples/timed-demo.srt
+new file mode 100644
+index 0000000..e06e7d4
+--- /dev/null
++++ b/examples/timed-demo.srt
+@@ -0,0 +1,28 @@
++1
++00:00:02,000 --> 00:00:06,000
++Welcome to this timed teleprompter demonstration.
++
++2
++00:00:06,000 --> 00:00:10,000
++This cue has two lines.
++Read both lines exactly as written.
++
++3
++00:00:13,000 --> 00:00:17,000
++There was a three-second gap before this cue.
++
++4
++00:00:17,000 --> 00:00:21,000
++Unicode works: Grüße, café, Ελληνικά, 日本語.
++
++5
++00:00:21,000 --> 00:00:26,000
++<i>This cue is formatted.</i> A &amp; B stay readable.
++
++6
++00:00:24,000 --> 00:00:28,000
++This cue overlaps the previous one for two seconds.
++
++7
++00:00:30,000 --> 00:00:34,000
++The final cue ends at thirty-four seconds.
+diff --git a/po/POTFILES b/po/POTFILES
+index fabf267..cc3afae 100644
+--- a/po/POTFILES
++++ b/po/POTFILES
+@@ -2,7 +2,8 @@ data/io.github.nokse22.teleprompter.desktop.in
+ data/io.github.nokse22.teleprompter.appdata.xml.in
+ data/io.github.nokse22.teleprompter.gschema.xml
+ src/main.py
++src/window.py
+ src/gtk/window.blp
+ src/gtk/shortcuts.blp
+ src/gtk/scroll_text_view.blp
+-src/osc_server.py
+\ No newline at end of file
++src/osc_server.py
+diff --git a/src/gtk/shortcuts.blp b/src/gtk/shortcuts.blp
+index 03d4579..23e1d1f 100644
+--- a/src/gtk/shortcuts.blp
++++ b/src/gtk/shortcuts.blp
+@@ -33,6 +33,26 @@ Adw.ShortcutsDialog shortcuts_dialog {
+       title: _("Fullscreen");
+       action-name: "app.fullscreen";
+     }
++
++    Adw.ShortcutsItem {
++      title: _("Open Text or SRT File");
++      action-name: "app.open";
++    }
++
++    Adw.ShortcutsItem {
++      title: _("Restart");
++      action-name: "win.restart";
++    }
++
++    Adw.ShortcutsItem {
++      title: _("Previous SRT Cue");
++      action-name: "win.previous-cue";
++    }
++
++    Adw.ShortcutsItem {
++      title: _("Next SRT Cue");
++      action-name: "win.next-cue";
++    }
+   }
+   Adw.ShortcutsSection {
+     Adw.ShortcutsItem {
+diff --git a/src/gtk/window.blp b/src/gtk/window.blp
+index c10d727..9291e4b 100644
+--- a/src/gtk/window.blp
++++ b/src/gtk/window.blp
+@@ -183,7 +183,82 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
+ 
+     [scroll-text-view]
+     Adw.ToastOverlay overlay {
+-      child: $TeleprompterScrollTextView scroll_text_view {
++      child: Box {
++        orientation: vertical;
++
++        $TeleprompterScrollTextView scroll_text_view {
++          vexpand: true;
++        }
++
++        Box srt_controls {
++          visible: false;
++          orientation: vertical;
++          spacing: 6;
++          margin-start: 12;
++          margin-end: 12;
++          margin-top: 6;
++          margin-bottom: 12;
++
++          Label srt_status {
++            xalign: 0;
++            wrap: true;
++            styles ["caption"]
++          }
++
++          Scale srt_seek {
++            hexpand: true;
++            draw-value: false;
++            tooltip-text: _("Seek in the SRT timeline");
++            adjustment: Adjustment {
++              lower: 0;
++              upper: 1;
++              step-increment: 0.1;
++              page-increment: 1;
++            };
++            value-changed => $srt_seek_changed();
++          }
++
++          Box {
++            spacing: 6;
++
++            Button {
++              icon-name: "media-skip-backward-symbolic";
++              tooltip-text: _("Previous cue (Alt+Left)");
++              action-name: "win.previous-cue";
++            }
++
++            Button {
++              icon-name: "media-seek-backward-symbolic";
++              tooltip-text: _("Restart at 00:00 (Ctrl+Home)");
++              action-name: "win.restart";
++            }
++
++            Button {
++              icon-name: "media-skip-forward-symbolic";
++              tooltip-text: _("Next cue (Alt+Right)");
++              action-name: "win.next-cue";
++            }
++
++            Label {
++              hexpand: true;
++              xalign: 1;
++              label: _("Offset (s)");
++            }
++
++            SpinButton srt_offset {
++              digits: 1;
++              numeric: true;
++              tooltip-text: _("Positive values show cues later; negative values show them earlier");
++              adjustment: Adjustment {
++                lower: -3600;
++                upper: 3600;
++                step-increment: 0.1;
++                page-increment: 1;
++              };
++              value-changed => $srt_offset_changed();
++            }
++          }
++        }
+       };
+     }
+ 
+@@ -197,7 +272,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
+     [start-button]
+     Button start_button {
+         icon-name: "media-playback-start-symbolic";
+-        tooltip-text: _("Start/Stop");
++        tooltip-text: _("Play/Pause (Ctrl+Space)");
+         can-target: true;
+         valign: center;
+         halign: center;
+@@ -218,7 +293,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
+       margin-end: 6;
+       spacing: 6;
+ 
+-      Button {
++      Button increase_speed_button {
+         icon-name: "value-increase-symbolic";
+         tooltip-text: _("Increase Speed");
+ 
+@@ -229,7 +304,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
+         clicked => $increase_speed_button_clicked();
+       }
+ 
+-      Button {
++      Button decrease_speed_button {
+         icon-name: "value-decrease-symbolic";
+         tooltip-text: _("Decrease Speed");
+ 
+@@ -361,4 +436,4 @@ menu primary_menu {
+       action: "app.about";
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/main.py b/src/main.py
+index 314dfbf..8097e4c 100644
+--- a/src/main.py
++++ b/src/main.py
+@@ -18,17 +18,16 @@
+ #
+ # SPDX-License-Identifier: GPL-3.0-or-later
+ 
++import gettext
+ import sys
++from gettext import gettext as _
++from os import path
++
++from gi.repository import Adw, Gio, GLib
+ 
+-from gi.repository import Gio, Adw, GLib
+-from .window import TeleprompterWindow
+ from .osc_server import OSCServer
+ from .preferences import PreferencesDialog
+-
+-import gettext
+-from gettext import gettext as _
+-
+-from os import path
++from .window import TeleprompterWindow
+ 
+ LOCALE_DIR = path.join(path.dirname(__file__).split("teleprompter")[0], "locale")
+ gettext.bindtextdomain("teleprompter", LOCALE_DIR)
+@@ -210,6 +209,10 @@ class TeleprompterApplication(Adw.Application):
+             # Create window-specific actions after window is created
+             self.create_action("play", self.win.play, ["<primary>space"])
+             self.create_action("fullscreen", self.win.toggle_fullscreen, ["F11"])
++            self.create_action("open", self.win.open_button_clicked, ["<primary>o"])
++            self.set_accels_for_action("win.restart", ["<primary>Home"])
++            self.set_accels_for_action("win.previous-cue", ["<Alt>Left"])
++            self.set_accels_for_action("win.next-cue", ["<Alt>Right"])
+ 
+             # Auto-start OSC server if enabled in settings
+             if self.settings.get_boolean("osc-autostart"):
+@@ -221,6 +224,8 @@ class TeleprompterApplication(Adw.Application):
+         """Cleanup when application terminates"""
+         if self.osc_server:
+             self.osc_server.stop()
++        if self.win:
++            self.win.pause()
+         Adw.Application.do_shutdown(self)
+ 
+     def on_about_action(self, *args):
+diff --git a/src/meson.build b/src/meson.build
+index 193dda4..59d4937 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -42,9 +42,11 @@ teleprompter_sources = [
+   '__init__.py',
+   'main.py',
+   'window.py',
++  'srt.py',
++  'timeline.py',
+   'preferences.py',
+   'scroll_text_view.py',
+   'osc_server.py'
+ ]
+ 
+-install_data(teleprompter_sources, install_dir: moduledir)
+\ No newline at end of file
++install_data(teleprompter_sources, install_dir: moduledir)
+diff --git a/src/osc_server.py b/src/osc_server.py
+index 3d0389b..d448314 100644
+--- a/src/osc_server.py
++++ b/src/osc_server.py
+@@ -17,9 +17,9 @@
+ #
+ # SPDX-License-Identifier: GPL-3.0-or-later
+ 
+-import threading
+ import socket
+ import struct
++import threading
+ 
+ from gi.repository import GLib
+ 
+@@ -196,23 +196,16 @@ class OSCServer:
+     # OSC command handlers
+ 
+     def handle_load_file(self, args, addr):
+-        """Load text file: /teleprompter/load [string path]"""
++        """Load a text or SRT file: /teleprompter/load [string path]"""
+         if not args:
+             self._send_response(addr, "/teleprompter/error", "Missing file path")
+             return
+ 
+         file_path = args[0]
+         try:
+-            with open(file_path, "r", encoding="utf-8") as file:
+-                content = file.read()
+-                self.window.text_buffer.set_text(content)
+-                self.window.apply_text_tags()
+-                self.window.update_font()
+-                start = self.window.text_buffer.get_start_iter()
+-                self.window.search_and_mark_highlight(start)
+-
+-                self._show_toast(f"Loaded file: {file_path}")
+-                self._send_response(addr, "/teleprompter/loaded", file_path)
++            self.window.load_file(file_path)
++            self._show_toast(f"Loaded file: {file_path}")
++            self._send_response(addr, "/teleprompter/loaded", file_path)
+         except Exception as e:
+             error_msg = f"Failed to load file: {str(e)}"
+             self._show_toast(error_msg)
+@@ -225,11 +218,7 @@ class OSCServer:
+             return
+ 
+         text_content = args[0]
+-        self.window.text_buffer.set_text(text_content)
+-        self.window.apply_text_tags()
+-        self.window.update_font()
+-        start = self.window.text_buffer.get_start_iter()
+-        self.window.search_and_mark_highlight(start)
++        self.window.set_plain_text(text_content)
+ 
+         self._show_toast("Text updated via OSC")
+         self._send_response(addr, "/teleprompter/text_set", len(text_content))
+@@ -245,20 +234,14 @@ class OSCServer:
+     def handle_pause(self, args, addr):
+         """Pause playback: /teleprompter/pause"""
+         if self.window.playing:
+-            self.window.play()  # Переключает состояние
++            self.window.pause()
+             self._send_response(addr, "/teleprompter/paused")
+         else:
+             self._send_response(addr, "/teleprompter/already_paused")
+ 
+     def handle_stop(self, args, addr):
+         """Stop playback and reset position: /teleprompter/stop"""
+-        if self.window.playing:
+-            self.window.play()  # Stop if playing
+-
+-        # Reset position to beginning
+-        adjustment = self.window.scrolled_window.get_vadjustment()
+-        adjustment.set_value(0)
+-
++        self.window.reset_playback()
+         self._send_response(addr, "/teleprompter/stopped")
+ 
+     def handle_set_speed(self, args, addr):
+@@ -270,14 +253,15 @@ class OSCServer:
+         try:
+             speed = float(args[0])
+             if 10 <= speed <= 500:  # Reasonable limits
+-                self.window.settings.speed = speed
++                self.window.set_playback_speed(speed)
+                 self._send_response(addr, "/teleprompter/speed_set", speed)
+             else:
+                 self._send_response(
+                     addr, "/teleprompter/error", "Speed must be between 10-500 WPM"
+                 )
+-        except ValueError:
+-            self._send_response(addr, "/teleprompter/error", "Invalid speed value")
++        except (TypeError, ValueError) as error:
++            message = str(error) if self.window.is_srt_mode else "Invalid speed value"
++            self._send_response(addr, "/teleprompter/error", message)
+ 
+     def handle_set_fontsize(self, args, addr):
+         """Set font size: /teleprompter/fontsize [int size]"""
+@@ -288,26 +272,17 @@ class OSCServer:
+         try:
+             size = int(args[0])
+             if 10 <= size <= 200:  # Reasonable limits
+-                font_properties = self.window.settings.font.split()
+-                font_properties[-1] = str(size)
+-                self.window.settings.font = " ".join(font_properties)
+-
+-                self.window.update_font()
+-                self.window.apply_text_tags()
+-                start = self.window.text_buffer.get_start_iter()
+-                self.window.search_and_mark_highlight(start)
+-                self.window.save_app_settings(self.window.settings)
+-
++                self.window.set_font_size(size)
+                 self._send_response(addr, "/teleprompter/fontsize_set", size)
+             else:
+                 self._send_response(
+                     addr, "/teleprompter/error", "Font size must be between 10-200"
+                 )
+-        except ValueError:
++        except (TypeError, ValueError):
+             self._send_response(addr, "/teleprompter/error", "Invalid font size")
+ 
+     def handle_set_position(self, args, addr):
+-        """Set scroll position: /teleprompter/position [float 0.0-1.0]"""
++        """Set scroll or SRT time position: /teleprompter/position [float 0.0-1.0]"""
+         if not args:
+             self._send_response(addr, "/teleprompter/error", "Missing position value")
+             return
+@@ -315,17 +290,13 @@ class OSCServer:
+         try:
+             position = float(args[0])
+             if 0.0 <= position <= 1.0:
+-                adjustment = self.window.scrolled_window.get_vadjustment()
+-                max_value = adjustment.get_upper() - adjustment.get_page_size()
+-                new_value = max_value * position
+-                adjustment.set_value(new_value)
+-
++                self.window.seek_fraction(position)
+                 self._send_response(addr, "/teleprompter/position_set", position)
+             else:
+                 self._send_response(
+                     addr, "/teleprompter/error", "Position must be between 0.0-1.0"
+                 )
+-        except ValueError:
++        except (TypeError, ValueError):
+             self._send_response(addr, "/teleprompter/error", "Invalid position value")
+ 
+     def handle_fullscreen(self, args, addr):
+@@ -346,69 +317,35 @@ class OSCServer:
+ 
+     def handle_hmirror(self, args, addr):
+         """Horizontal mirroring: /teleprompter/mirror/horizontal [bool]"""
+-        if args:
+-            mirror = bool(args[0])
+-            self.window.scroll_text_view.hmirror = mirror
+-            app = self.window.get_application()
+-            app.hmirror_action.set_state(GLib.Variant.new_boolean(mirror))
+-            app.saved_settings.set_boolean("hmirror", mirror)
+-        else:
+-            # Toggle state
+-            current = self.window.scroll_text_view.hmirror
+-            self.window.scroll_text_view.hmirror = not current
+-
+-        self._send_response(
+-            addr, "/teleprompter/hmirror", self.window.scroll_text_view.hmirror
++        mirror = (
++            bool(args[0]) if args else not self.window.settings.get_boolean("hmirror")
+         )
++        self.window.settings.set_boolean("hmirror", mirror)
++        self._send_response(addr, "/teleprompter/hmirror", mirror)
+ 
+     def handle_vmirror(self, args, addr):
+         """Vertical mirroring: /teleprompter/mirror/vertical [bool]"""
+-        if args:
+-            mirror = bool(args[0])
+-            self.window.scroll_text_view.vmirror = mirror
+-            app = self.window.get_application()
+-            app.vmirror_action.set_state(GLib.Variant.new_boolean(mirror))
+-            app.saved_settings.set_boolean("vmirror", mirror)
+-        else:
+-            # Toggle state
+-            current = self.window.scroll_text_view.vmirror
+-            self.window.scroll_text_view.vmirror = not current
+-
+-        self._send_response(
+-            addr, "/teleprompter/vmirror", self.window.scroll_text_view.vmirror
++        mirror = (
++            bool(args[0]) if args else not self.window.settings.get_boolean("vmirror")
+         )
++        self.window.settings.set_boolean("vmirror", mirror)
++        self._send_response(addr, "/teleprompter/vmirror", mirror)
+ 
+     def handle_reset(self, args, addr):
+         """Reset mirroring and position: /teleprompter/reset"""
+-        # Reset mirroring
+-        self.window.scroll_text_view.hmirror = False
+-        self.window.scroll_text_view.vmirror = False
+-
+-        app = self.window.get_application()
+-        app.vmirror_action.set_state(GLib.Variant.new_boolean(False))
+-        app.hmirror_action.set_state(GLib.Variant.new_boolean(False))
+-
+-        # Reset position
+-        adjustment = self.window.scrolled_window.get_vadjustment()
+-        adjustment.set_value(0)
+-
+-        # Stop playback
+-        if self.window.playing:
+-            self.window.play()
+-
++        self.window.settings.set_boolean("hmirror", False)
++        self.window.settings.set_boolean("vmirror", False)
++        self.window.reset_playback()
+         self._send_response(addr, "/teleprompter/reset_complete")
+ 
+     def handle_get_status(self, args, addr):
+         """Get current status: /teleprompter/status"""
+-        adjustment = self.window.scrolled_window.get_vadjustment()
+-        max_value = adjustment.get_upper() - adjustment.get_page_size()
+-        position = adjustment.get_value() / max_value if max_value > 0 else 0
++        position = self.window.playback_fraction
++        speed = 0 if self.window.is_srt_mode else self.window.settings.get_int("speed")
+ 
+         # Send detailed status
+         self._send_response(addr, "/teleprompter/status/playing", self.window.playing)
+-        self._send_response(
+-            addr, "/teleprompter/status/speed", self.window.settings.speed
+-        )
++        self._send_response(addr, "/teleprompter/status/speed", speed)
+         self._send_response(addr, "/teleprompter/status/position", position)
+         self._send_response(
+             addr, "/teleprompter/status/fullscreen", self.window.is_fullscreen()
+diff --git a/src/srt.py b/src/srt.py
+new file mode 100644
+index 0000000..c0388ff
+--- /dev/null
++++ b/src/srt.py
+@@ -0,0 +1,171 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++
++"""Read SubRip subtitles without changing the script's wording.
++
++This module deliberately has no GTK dependency so parsing can also be checked
++from the command line. Cue text is plain text, including any literal markup in
++the input; callers must not interpret it as trusted UI markup.
++"""
++
++import re
++from dataclasses import dataclass
++from html import unescape
++
++
++@dataclass(frozen=True)
++class Cue:
++    """One subtitle, active from ``start_ms`` up to (excluding) ``end_ms``."""
++
++    start_ms: int
++    end_ms: int
++    text: str
++
++    def __post_init__(self):
++        if self.start_ms < 0 or self.end_ms <= self.start_ms:
++            raise ValueError("A subtitle must have a nonnegative start and a later end")
++
++
++class SubtitleParseError(ValueError):
++    """A readable import error, optionally identifying a source line and cue."""
++
++    def __init__(self, message, *, line=None, cue_number=None):
++        self.line = line
++        self.cue_number = cue_number
++        context = []
++        if line is not None:
++            context.append(f"line {line}")
++        if cue_number is not None:
++            context.append(f"cue {cue_number}")
++        prefix = f"{', '.join(context)}: " if context else ""
++        super().__init__(prefix + message)
++
++
++# A dot is accepted as a common export variant of SubRip's comma separator.
++_STAMP = r"(?P<{name}>\d+:\d{{2}}:\d{{2}}[,\.]\d{{3}})"
++_TIMING = re.compile(
++    r"^[ \t]*"
++    + _STAMP.format(name="start")
++    + r"[ \t]*-->[ \t]*"
++    + _STAMP.format(name="end")
++    # Some SRT exporters include positioning metadata after the end time.
++    + r"(?:[ \t]+X1:\d+[ \t]+X2:\d+[ \t]+Y1:\d+[ \t]+Y2:\d+)?"
++    + r"[ \t]*$",
++    re.IGNORECASE,
++)
++_COUNTER = re.compile(r"^[ \t]*\d+[ \t]*$")
++_PRESENTATION_TAG = re.compile(r"</?(?:b|i|u|s|font)(?:\s+[^<>]*)?\s*>", re.IGNORECASE)
++_LINE_BREAK_TAG = re.compile(r"<br\s*/?>", re.IGNORECASE)
++_ENTITY = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]+);")
++
++
++def display_text(text: str) -> str:
++    """Remove common SRT presentation markup without interpreting arbitrary HTML.
++
++    Cue source text remains unchanged. Entity decoding happens after tag removal
++    so escaped literal ``&lt;i&gt;`` stays visible as ``<i>``. Only complete entities
++    ending with a semicolon are decoded; ordinary wording such as ``&not`` stays
++    intact. The result is still plain text, not safe-to-render HTML or UI markup.
++    """
++
++    text = _LINE_BREAK_TAG.sub("\n", text)
++    text = _PRESENTATION_TAG.sub("", text)
++    return _ENTITY.sub(lambda match: unescape(match[0]), text)
++
++
++def decode_text(data: bytes) -> str:
++    """Decode UTF-8 or BOM-marked UTF-16, rejecting lossy fallback decoding."""
++
++    if data.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
++        raise SubtitleParseError("UTF-32 is not supported; save this file as UTF-8")
++    encoding = "utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
++    try:
++        text = data.decode(encoding)
++    except UnicodeError as error:
++        raise SubtitleParseError(
++            "Cannot decode this file; save it as UTF-8 or UTF-16 with a BOM"
++        ) from error
++    if "\x00" in text:
++        raise SubtitleParseError(
++            "Unexpected NUL characters; save this file as UTF-8 or UTF-16 with a BOM"
++        )
++    return text
++
++
++def _timestamp_ms(stamp, *, line, cue_number):
++    hours, minutes, seconds = stamp.replace(".", ",").split(":")
++    seconds, milliseconds = seconds.split(",")
++    if int(minutes) > 59 or int(seconds) > 59:
++        raise SubtitleParseError(
++            "Timestamp minutes and seconds must be between 00 and 59",
++            line=line,
++            cue_number=cue_number,
++        )
++    return (int(hours) * 3600 + int(minutes) * 60 + int(seconds)) * 1000 + int(
++        milliseconds
++    )
++
++
++def parse_srt(text: str) -> tuple[Cue, ...]:
++    """Parse SRT cues in file order, preserving their Unicode and line breaks.
++
++    Counters are optional and need not be consecutive. Overlapping and
++    nonchronological cues are retained. Blank lines separate cues, as in SubRip;
++    line-ending conventions and a leading BOM are normalized, but cue wording,
++    whitespace, and literal formatting tags are otherwise left unchanged.
++    """
++
++    normalized = text.removeprefix("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
++    lines = normalized.split("\n")
++    cues = []
++    index = 0
++    while index < len(lines):
++        if not lines[index].strip():
++            index += 1
++            continue
++
++        cue_number = len(cues) + 1
++        if _COUNTER.fullmatch(lines[index]):
++            cue_number = int(lines[index].strip())
++            index += 1
++        line_number = index + 1
++        match = _TIMING.fullmatch(lines[index]) if index < len(lines) else None
++        if match is None:
++            raise SubtitleParseError(
++                "Expected a timestamp line such as 00:00:01,000 --> 00:00:03,000",
++                line=line_number,
++                cue_number=cue_number,
++            )
++
++        start_ms = _timestamp_ms(
++            match["start"], line=line_number, cue_number=cue_number
++        )
++        end_ms = _timestamp_ms(match["end"], line=line_number, cue_number=cue_number)
++        if end_ms <= start_ms:
++            raise SubtitleParseError(
++                "Subtitle end must be later than its start",
++                line=line_number,
++                cue_number=cue_number,
++            )
++
++        index += 1
++        body = []
++        while index < len(lines) and lines[index].strip():
++            if _TIMING.fullmatch(lines[index]):
++                raise SubtitleParseError(
++                    "Missing blank line between subtitles",
++                    line=index + 1,
++                    cue_number=cue_number,
++                )
++            body.append(lines[index])
++            index += 1
++        if not body:
++            raise SubtitleParseError(
++                "Subtitle has no text",
++                line=line_number,
++                cue_number=cue_number,
++            )
++        cues.append(Cue(start_ms, end_ms, "\n".join(body)))
++
++    if not cues:
++        raise SubtitleParseError("No subtitles found in this file")
++    return tuple(cues)
+diff --git a/src/timeline.py b/src/timeline.py
+new file mode 100644
+index 0000000..18696ee
+--- /dev/null
++++ b/src/timeline.py
+@@ -0,0 +1,171 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++
++"""A timestamp-driven subtitle transport, independent of GTK timer frequency."""
++
++import time
++from bisect import bisect_right
++from dataclasses import dataclass
++from math import floor
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    from .srt import Cue
++
++
++@dataclass(frozen=True)
++class TimelineSnapshot:
++    """A coherent display state captured at one transport timestamp."""
++
++    position_ms: int
++    active_indices: tuple[int, ...]
++    next_index: int | None
++    playing: bool
++
++
++class SubtitleTimeline:
++    """Play subtitles against an injected monotonic clock in seconds.
++
++    ``position_ms`` is the transport clock. A positive ``offset_ms`` displays
++    every cue later: a cue at 1000 ms with a +500 ms offset starts when transport
++    reaches 1500 ms. Negative offsets show cues earlier. Effective subtitle time
++    is ``position_ms - offset_ms`` and can be negative during an initial delay.
++
++    UI callbacks only read the clock; their frequency cannot accumulate drift.
++    Cue intervals include the start and exclude the end. Overlapping cues are
++    all active, in original file order. ``next_index`` identifies the earliest
++    upcoming cue, even if another cue is currently active.
++    """
++
++    def __init__(self, cues, *, clock=time.monotonic, offset_ms=0):
++        self.cues: tuple[Cue, ...] = tuple(cues)
++        self._clock = clock
++        self._position_ms = 0
++        self._anchor = None
++        self._last_end_ms = max((cue.end_ms for cue in self.cues), default=0)
++        self._offset_ms = self._milliseconds(offset_ms)
++        self._start_order = tuple(
++            sorted(range(len(self.cues)), key=lambda index: self.cues[index].start_ms)
++        )
++        self._starts = tuple(self.cues[index].start_ms for index in self._start_order)
++
++    @staticmethod
++    def _milliseconds(value):
++        if not isinstance(value, int):
++            raise TypeError("Milliseconds must be an integer")
++        return value
++
++    @property
++    def duration_ms(self):
++        """Transport end, including a signed subtitle offset."""
++
++        if not self.cues:
++            return 0
++        return max(0, self._last_end_ms + self._offset_ms)
++
++    @property
++    def position_ms(self):
++        position = self._position_ms
++        if self._anchor is not None:
++            # The tiny tolerance avoids losing an exact millisecond to binary
++            # float representation (e.g. (10.001 - 10.0) * 1000 < 1).
++            elapsed_ms = max(0, floor((self._clock() - self._anchor) * 1000 + 1e-6))
++            position += elapsed_ms
++        if position >= self.duration_ms:
++            self._position_ms = self.duration_ms
++            self._anchor = None
++            return self.duration_ms
++        return position
++
++    @property
++    def playing(self):
++        # Reading the position also stops transport at the last cue's end.
++        _ = self.position_ms
++        return self._anchor is not None
++
++    @property
++    def finished(self):
++        return self.position_ms >= self.duration_ms
++
++    @property
++    def offset_ms(self):
++        return self._offset_ms
++
++    @offset_ms.setter
++    def offset_ms(self, value):
++        value = self._milliseconds(value)
++        position = self.position_ms
++        was_playing = self._anchor is not None
++        self._offset_ms = value
++        self._position_ms = min(position, self.duration_ms)
++        self._anchor = (
++            self._clock()
++            if was_playing and self._position_ms < self.duration_ms
++            else None
++        )
++
++    @property
++    def active_indices(self):
++        return self._active_indices_at(self.position_ms)
++
++    def _active_indices_at(self, position_ms):
++        cue_time = position_ms - self._offset_ms
++        return tuple(
++            index
++            for index, cue in enumerate(self.cues)
++            if cue.start_ms <= cue_time < cue.end_ms
++        )
++
++    @property
++    def next_index(self):
++        return self._next_index_at(self.position_ms)
++
++    def _next_index_at(self, position_ms):
++        cue_time = position_ms - self._offset_ms
++        next_position = bisect_right(self._starts, cue_time)
++        if next_position == len(self._start_order):
++            return None
++        return self._start_order[next_position]
++
++    def snapshot(self) -> TimelineSnapshot:
++        """Read the clock once so a redraw cannot mix states across a cue boundary."""
++
++        position = self.position_ms
++        return TimelineSnapshot(
++            position_ms=position,
++            active_indices=self._active_indices_at(position),
++            next_index=self._next_index_at(position),
++            playing=self._anchor is not None,
++        )
++
++    def play(self):
++        """Start/resume transport; restart from zero after completion."""
++
++        if self.playing or self.duration_ms == 0:
++            return
++        if self.finished:
++            self._position_ms = 0
++        self._anchor = self._clock()
++
++    def pause(self):
++        """Freeze at the current timestamp, preserving resume position."""
++
++        self._position_ms = self.position_ms
++        self._anchor = None
++
++    def reset(self):
++        """Pause and return to transport zero, retaining the offset."""
++
++        self._position_ms = 0
++        self._anchor = None
++
++    def seek(self, position_ms):
++        """Seek within transport bounds; preserve playback unless at the end."""
++
++        position_ms = self._milliseconds(position_ms)
++        was_playing = self.playing
++        self._position_ms = max(0, min(position_ms, self.duration_ms))
++        self._anchor = (
++            self._clock()
++            if was_playing and self._position_ms < self.duration_ms
++            else None
++        )
+diff --git a/src/window.py b/src/window.py
+index 0085ecf..5a59fe2 100644
+--- a/src/window.py
++++ b/src/window.py
+@@ -17,15 +17,27 @@
+ #
+ # SPDX-License-Identifier: GPL-3.0-or-later
+ 
+-from gi.repository import Gtk, Gdk, Pango, GLib, Gio, Adw, GObject
++from gettext import gettext as _
++from pathlib import Path
+ 
+-from .scroll_text_view import TeleprompterScrollTextView
++from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
+ 
+-from gettext import gettext as _
++from .scroll_text_view import TeleprompterScrollTextView
++from .srt import SubtitleParseError, decode_text, display_text, parse_srt
++from .timeline import SubtitleTimeline
+ 
+ GObject.type_register(TeleprompterScrollTextView)
+ 
+ 
++def format_time(milliseconds):
++    """Format the transport position without rounding into the next cue."""
++    milliseconds = max(0, int(milliseconds))
++    seconds, milliseconds = divmod(milliseconds, 1000)
++    minutes, seconds = divmod(seconds, 60)
++    hours, minutes = divmod(minutes, 60)
++    return f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
++
++
+ @Gtk.Template(resource_path="/io/github/nokse22/teleprompter/gtk/window.ui")
+ class TeleprompterWindow(Adw.ApplicationWindow):
+     __gtype_name__ = "TeleprompterWindow"
+@@ -35,184 +47,396 @@ class TeleprompterWindow(Adw.ApplicationWindow):
+     fullscreen_button = Gtk.Template.Child()
+     overlay = Gtk.Template.Child()
+     title_widget = Gtk.Template.Child()
+-
+-    playing = False
++    increase_speed_button = Gtk.Template.Child()
++    decrease_speed_button = Gtk.Template.Child()
++    srt_controls = Gtk.Template.Child()
++    srt_status = Gtk.Template.Child()
++    srt_seek = Gtk.Template.Child()
++    srt_offset = Gtk.Template.Child()
+ 
+     def __init__(self, **kwargs):
+         super().__init__(**kwargs)
+ 
++        self.playing = False
++        self.timeline = None
++        self._playback_source_id = 0
++        self._updating_srt_controls = False
++        self._rendered_cues = None
++        self._closed = False
+         self.settings = Gio.Settings("io.github.nokse22.teleprompter")
+ 
+         self.text_buffer = self.scroll_text_view.get_buffer()
+         self.scrolled_window = self.scroll_text_view.get_scrolled_window()
++        self.prompt_text_view = self.scroll_text_view.text_view._text_view
+ 
+-        # Add text tags
+         self.text_tag = Gtk.TextTag()
+         self.highlight_tag = Gtk.TextTag()
+-        self.text_buffer.get_tag_table().add(self.text_tag)
+-        self.text_buffer.get_tag_table().add(self.highlight_tag)
++        self.current_cue_tag = Gtk.TextTag(weight=Pango.Weight.BOLD)
++        self.preview_tag = Gtk.TextTag(scale=0.7)
++        for tag in (
++            self.text_tag,
++            self.highlight_tag,
++            self.current_cue_tag,
++            self.preview_tag,
++        ):
++            self.text_buffer.get_tag_table().add(tag)
+         self.update_text_tags()
+ 
+-        # Bind mirror settings directly to the scroll text view
+         self.settings.bind("hmirror", self.scroll_text_view, "hmirror", 0)
+         self.settings.bind("vmirror", self.scroll_text_view, "vmirror", 0)
+-
+-        adjustment = self.scroll_text_view.get_scrolled_window().get_vadjustment()
++        adjustment = self.scrolled_window.get_vadjustment()
+         adjustment.connect("value-changed", self.on_scroll_changed)
+ 
+-        self.settings.connect("changed::text-color", self.update_text_tags)
+-        self.settings.connect("changed::highlight-color", self.update_text_tags)
+-        self.settings.connect("changed::font", self.update_text_tags)
+-        self.settings.connect("changed::bold-highlight", self.update_text_tags)
++        for key in ("text-color", "highlight-color", "font", "bold-highlight"):
++            self.settings.connect(f"changed::{key}", self.update_text_tags)
+         self.text_buffer.connect("paste-done", self.update_text_tags)
+         self.text_buffer.connect("changed", self.update_text_tags)
++        self.connect("close-request", self._on_close_request)
++
++        for name, callback in (
++            ("restart", self.reset_playback),
++            ("previous-cue", lambda *_: self.step_cue(-1)),
++            ("next-cue", lambda *_: self.step_cue(1)),
++        ):
++            action = Gio.SimpleAction.new(name, None)
++            action.connect("activate", callback)
++            self.add_action(action)
++        self._update_mode_controls()
++
++    @property
++    def is_srt_mode(self):
++        return self.timeline is not None
++
++    @property
++    def playback_fraction(self):
++        if self.is_srt_mode:
++            duration = self.timeline.duration_ms
++            return self.timeline.position_ms / duration if duration else 0.0
++        adjustment = self.scrolled_window.get_vadjustment()
++        maximum = adjustment.get_upper() - adjustment.get_page_size()
++        return adjustment.get_value() / maximum if maximum > 0 else 0.0
+ 
+     def on_scroll_changed(self, adjustment):
+-        if adjustment.get_value() == 0:
+-            self.title_widget.set_visible(True)
+-        else:
+-            self.title_widget.set_visible(False)
++        self.title_widget.set_visible(self.is_srt_mode or adjustment.get_value() == 0)
+ 
+     def show_file_chooser_dialog(self):
+-        dialog = Gtk.FileDialog(title=_("Open File"))
++        formats = Gtk.FileFilter(name=_("Text and SRT files"))
++        for pattern in ("*.txt", "*.text", "*.srt", "*.SRT"):
++            formats.add_pattern(pattern)
++        all_files = Gtk.FileFilter(name=_("All files"))
++        all_files.add_pattern("*")
++        filters = Gio.ListStore.new(Gtk.FileFilter)
++        filters.append(formats)
++        filters.append(all_files)
++        dialog = Gtk.FileDialog(
++            title=_("Open File"), filters=filters, default_filter=formats
++        )
+         dialog.open(self, None, self.on_open_file_response)
+ 
+     def on_open_file_response(self, dialog, response):
+         try:
+-            file = dialog.open_finish(response)
+-            if not file:
+-                return
+-            file_path = file.get_path()
+-            try:
+-                with open(file_path, "r") as file:
+-                    file_contents = file.read()
+-                    self.text_buffer.set_text(file_contents)
+-                dialog.destroy()
+-                self.add_toast(_("File successfully opened"))
+-            except Exception:
+-                self.add_toast(_("Error reading file"))
+-        except Exception:
++            selected_file = dialog.open_finish(response)
++        except GLib.Error:
++            # Dismissing the chooser is not a document load.
+             return
++        if selected_file:
++            # Gio also supports files selected through the Flatpak file portal.
++            selected_file.load_contents_async(
++                None, self._on_file_contents_loaded, selected_file.get_basename()
++            )
++
++    def _on_file_contents_loaded(self, file, response, name):
++        if self._closed:
++            return
++        try:
++            success, contents, _etag = file.load_contents_finish(response)
++            if not success:
++                raise OSError(_("Could not read the selected file"))
++            self.load_document(contents, name or "")
++            self.add_toast(_("File successfully opened"))
++        except (GLib.Error, OSError, SubtitleParseError) as error:
++            self.add_toast(str(error))
++
++    def load_file(self, file_path):
++        """Shared loader for the file chooser and OSC; failed loads are atomic."""
++        path = Path(file_path)
++        self.load_document(path.read_bytes(), path.name)
++
++    def load_document(self, contents, name):
++        text = decode_text(contents)
++        if Path(name).suffix.lower() == ".srt":
++            # Validate before replacing the current document or stopping playback.
++            cues = parse_srt(text)
++            timeline = SubtitleTimeline(cues)
++            self.pause()
++            self.timeline = timeline
++            self._rendered_cues = None
++            self._updating_srt_controls = True
++            try:
++                self.srt_offset.set_value(0)
++            finally:
++                self._updating_srt_controls = False
++            self._update_mode_controls()
++            self.title_widget.set_label(name)
++            self._render_srt()
++        else:
++            self.set_plain_text(text)
++
++    def set_plain_text(self, content):
++        self.pause()
++        self.timeline = None
++        self._rendered_cues = None
++        self._update_mode_controls()
++        self.title_widget.set_label(_("Teleprompter"))
++        self.text_buffer.set_text(content)
++        self.scrolled_window.get_vadjustment().set_value(0)
++
++    def _update_mode_controls(self):
++        srt_mode = self.is_srt_mode
++        self.srt_controls.set_visible(srt_mode)
++        self.increase_speed_button.set_sensitive(not srt_mode)
++        self.decrease_speed_button.set_sensitive(not srt_mode)
++        self.prompt_text_view.set_editable(not srt_mode)
++        self.prompt_text_view.set_cursor_visible(not srt_mode)
++        for name in ("previous-cue", "next-cue"):
++            self.lookup_action(name).set_enabled(srt_mode)
++
++    def _cancel_playback_source(self):
++        if self._playback_source_id:
++            GLib.source_remove(self._playback_source_id)
++            self._playback_source_id = 0
++
++    def _update_play_button(self):
++        self.start_button.set_icon_name(
++            "media-playback-pause-symbolic"
++            if self.playing
++            else "media-playback-start-symbolic"
++        )
+ 
+-    def autoscroll(self, scrolled_window):
+-        adjustment = scrolled_window.get_vadjustment()
+-        adjustment.set_value(adjustment.get_value() + self.wpm_to_speed())
+-        scrolled_window.set_vadjustment(adjustment)
+-
+-        value = adjustment.get_value()
+-        upper = adjustment.get_upper()
+-        page_size = adjustment.get_page_size()
++    def pause(self):
++        self._cancel_playback_source()
++        if self.is_srt_mode:
++            self.timeline.pause()
++        self.playing = False
++        self._update_play_button()
++        if self.is_srt_mode:
++            self._render_srt()
++
++    def reset_playback(self, *args):
++        self.pause()
++        if self.is_srt_mode:
++            self.timeline.reset()
++            self._render_srt()
++        else:
++            self.scrolled_window.get_vadjustment().set_value(0)
+ 
+-        if value == upper - page_size:
+-            self.playing = False
+-            self.start_button.set_icon_name("media-playback-start-symbolic")
+-            return False
++    def seek_fraction(self, fraction):
++        fraction = max(0.0, min(1.0, float(fraction)))
++        if self.is_srt_mode:
++            self.timeline.seek(round(fraction * self.timeline.duration_ms))
++            self._after_srt_seek()
++        else:
++            adjustment = self.scrolled_window.get_vadjustment()
++            maximum = max(0, adjustment.get_upper() - adjustment.get_page_size())
++            adjustment.set_value(fraction * maximum)
+ 
++    def _after_srt_seek(self):
++        self.playing = self.timeline.playing
+         if not self.playing:
++            self._cancel_playback_source()
++        self._update_play_button()
++        self._render_srt()
++
++    def step_cue(self, direction):
++        if not self.is_srt_mode:
++            return
++        position = self.timeline.position_ms
++        starts = sorted({
++            max(0, cue.start_ms + self.timeline.offset_ms) for cue in self.timeline.cues
++        })
++        if direction > 0:
++            target = next(
++                (start for start in starts if start > position),
++                self.timeline.duration_ms,
++            )
++        else:
++            target = next((start for start in reversed(starts) if start < position), 0)
++        self.timeline.seek(target)
++        self._after_srt_seek()
++
++    @Gtk.Template.Callback("srt_seek_changed")
++    def on_srt_seek_changed(self, scale):
++        if self.is_srt_mode and not self._updating_srt_controls:
++            self.timeline.seek(round(scale.get_value() * 1000))
++            self._after_srt_seek()
++
++    @Gtk.Template.Callback("srt_offset_changed")
++    def on_srt_offset_changed(self, spin):
++        if self.is_srt_mode and not self._updating_srt_controls:
++            self.timeline.offset_ms = round(spin.get_value() * 1000)
++            self._after_srt_seek()
++
++    def _render_srt(self):
++        timeline = self.timeline
++        snapshot = timeline.snapshot()
++        position = snapshot.position_ms
++        active = snapshot.active_indices
++        upcoming = snapshot.next_index
++        state = (active, upcoming)
++        if state != self._rendered_cues:
++            current = "\n\n".join(
++                display_text(timeline.cues[index].text) for index in active
++            )
++            preview = ""
++            if upcoming is not None:
++                preview = (
++                    _("Up next") + "\n" + display_text(timeline.cues[upcoming].text)
++                )
++            separator = "\n\n" if current and preview else ""
++            self.text_buffer.set_text(current + separator + preview)
++            if current:
++                self.text_buffer.apply_tag(
++                    self.current_cue_tag,
++                    self.text_buffer.get_start_iter(),
++                    self.text_buffer.get_iter_at_offset(len(current)),
++                )
++            if preview:
++                self.text_buffer.apply_tag(
++                    self.preview_tag,
++                    self.text_buffer.get_iter_at_offset(len(current + separator)),
++                    self.text_buffer.get_end_iter(),
++                )
++            self.scrolled_window.get_vadjustment().set_value(0)
++            self._rendered_cues = state
++
++        self._updating_srt_controls = True
++        try:
++            self.srt_seek.set_range(0, max(0.001, timeline.duration_ms / 1000))
++            self.srt_seek.set_value(position / 1000)
++        finally:
++            self._updating_srt_controls = False
++
++        if active:
++            cue_status = _("Cue %(cue)d of %(total)d") % {
++                "cue": active[0] + 1,
++                "total": len(timeline.cues),
++            }
++        elif upcoming is not None:
++            until = timeline.cues[upcoming].start_ms + timeline.offset_ms - position
++            cue_status = _("Next cue in %(time)s") % {"time": format_time(until)}
++        else:
++            cue_status = _("End of script")
++        playback_state = _("Playing") if self.playing else _("Paused")
++        self.srt_status.set_label(
++            f"{playback_state} · {format_time(position)} / "
++            f"{format_time(timeline.duration_ms)} · {cue_status}"
++        )
++
++    def _on_playback_tick(self):
++        if not self.playing or self._closed:
++            self._playback_source_id = 0
+             return False
++        if self.is_srt_mode:
++            self._render_srt()
++            self.playing = self.timeline.playing
++            if not self.playing:
++                self._update_play_button()
++                self._render_srt()
+         else:
+-            return True
++            self.autoscroll(self.scrolled_window)
++        if not self.playing:
++            self._playback_source_id = 0
++        return self.playing
++
++    def autoscroll(self, scrolled_window):
++        adjustment = scrolled_window.get_vadjustment()
++        maximum = max(0, adjustment.get_upper() - adjustment.get_page_size())
++        adjustment.set_value(min(maximum, adjustment.get_value() + self.wpm_to_speed()))
++        if adjustment.get_value() >= maximum:
++            self.playing = False
++            self._update_play_button()
++        return self.playing
+ 
+     def update_text_tags(self, *args):
+         self.text_tag.set_property("foreground", self.settings.get_string("text-color"))
+         self.text_tag.set_property(
+             "font-desc", Pango.FontDescription(self.settings.get_string("font"))
+         )
+-
+         self.highlight_tag.set_property(
+             "foreground", self.settings.get_string("highlight-color")
+         )
+-        if self.settings.get_boolean("bold-highlight"):
+-            self.highlight_tag.set_property("weight", Pango.Weight.BOLD)
+-        else:
+-            self.highlight_tag.set_property("weight", Pango.Weight.NORMAL)
+-
++        self.highlight_tag.set_property(
++            "weight",
++            Pango.Weight.BOLD
++            if self.settings.get_boolean("bold-highlight")
++            else Pango.Weight.NORMAL,
++        )
+         self.text_buffer.apply_tag(
+             self.text_tag,
+             self.text_buffer.get_start_iter(),
+             self.text_buffer.get_end_iter(),
+         )
++        if not self.is_srt_mode:
++            self.search_and_mark_highlight()
+ 
+-        self.search_and_mark_highlight()
+-
+-    def search_and_mark_highlight(self, start=None):
+-        if start is None:
+-            start = self.text_buffer.get_start_iter()
++    def search_and_mark_highlight(self):
++        # Iterative so long scripts with many marked phrases cannot exhaust recursion.
++        start = self.text_buffer.get_start_iter()
+         end = self.text_buffer.get_end_iter()
+-        text = "["
+-
+-        match = start.forward_search(text, 0, end)
+-
+-        if match is not None:
+-            match_start, match_end = match
+-            match_end_highlight = self.search_end_highlight(match_end)
+-            if match_end_highlight is not None:
+-                self.text_buffer.apply_tag(
+-                    self.highlight_tag, match_start, match_end_highlight
+-                )
+-            self.search_and_mark_highlight(match_end)
+-
+-    def search_end_highlight(self, start):
+-        end = self.text_buffer.get_end_iter()
+-
+-        match_right = start.forward_search("]", Gtk.TextSearchFlags(0), end)
+-        match_left = start.forward_search("[", Gtk.TextSearchFlags(0), end)
+-
+-        if match_right is not None:
+-            _, match_end_right = match_right
+-            if match_left is not None:
+-                _, match_end_left = match_left
+-                if match_end_right.compare(match_end_left) < 0:
+-                    return match_end_right
+-            if match_left is None and match_right is not None:
+-                return match_end_right
+-            return None
+-        return None
++        while match := start.forward_search("[", Gtk.TextSearchFlags(0), end):
++            match_start, after_open = match
++            closing = after_open.forward_search("]", Gtk.TextSearchFlags(0), end)
++            if not closing:
++                break
++            _closing_start, after_close = closing
++            nested = after_open.forward_search("[", Gtk.TextSearchFlags(0), after_close)
++            if not nested:
++                self.text_buffer.apply_tag(self.highlight_tag, match_start, after_close)
++            start = after_open
+ 
+     def wpm_to_speed(self):
+-        font_properties = self.settings.get_string("font").split()
+-        font_size = font_properties[-1]
+-
+-        font = int(font_size)
+-        width = self.scroll_text_view.get_width()
+-        speed = self.settings.get_int("speed") * font * 0.2 / width
++        font = Pango.FontDescription(self.settings.get_string("font")).get_size()
++        points = font / Pango.SCALE
++        width = max(1, self.scroll_text_view.get_width())
++        return max(0.25, self.settings.get_int("speed") * points * 0.2 / width)
+ 
+-        if speed <= 0.25:
+-            speed = 0.25
++    def set_playback_speed(self, speed):
++        if self.is_srt_mode:
++            raise ValueError(_("SRT playback uses its timestamps, not a reading speed"))
++        self.settings.set_int("speed", round(speed))
+ 
+-        return speed
++    def set_font_size(self, points):
++        description = Pango.FontDescription(self.settings.get_string("font"))
++        description.set_size(round(max(10, points) * Pango.SCALE))
++        self.settings.set_string("font", description.to_string())
+ 
+     def change_font_size(self, amount):
+-        font_properties = self.settings.get_string("font").split()
+-        font_size = font_properties[-1]
+-
+-        if int(font_size) + amount > 10:
+-            new_font_size = int(font_size) + amount
+-        else:
+-            new_font_size = 10
+-
+-        font_properties[-1] = str(new_font_size)
+-
+-        self.settings.set_string("font", " ".join(font_properties))
++        description = Pango.FontDescription(self.settings.get_string("font"))
++        self.set_font_size(description.get_size() / Pango.SCALE + amount)
+ 
+     def add_toast(self, message):
+-        toast = Adw.Toast()
+-        toast.set_title(message)
+-        toast.set_timeout(3)
++        toast = Adw.Toast(title=message, timeout=5)
+         self.overlay.add_toast(toast)
+ 
+     @Gtk.Template.Callback("play_button_clicked")
+     def play(self, *args):
+-        if not self.playing:
+-            self.start_button.set_icon_name("media-playback-pause-symbolic")
+-            self.playing = True
+-
+-            # Start continuous autoscrolling
+-            GLib.timeout_add(10, self.autoscroll, self.scrolled_window)
++        if self.playing:
++            self.pause()
++            return
++        self._cancel_playback_source()
++        if self.is_srt_mode:
++            self.timeline.play()
++            self.playing = self.timeline.playing
++            self._render_srt()
+         else:
+-            self.start_button.set_icon_name("media-playback-start-symbolic")
+-            self.playing = False
+-            self.settings.set_int("speed", 0)
++            self.playing = True
++        self._update_play_button()
++        if self.playing:
++            # The timeout only refreshes the display; the SRT clock is monotonic.
++            interval = 20 if self.is_srt_mode else 10
++            self._playback_source_id = GLib.timeout_add(
++                interval, self._on_playback_tick
++            )
+ 
+     @Gtk.Template.Callback("open_button_clicked")
+     def open_button_clicked(self, *args):
+@@ -220,26 +444,30 @@ class TeleprompterWindow(Adw.ApplicationWindow):
+ 
+     @Gtk.Template.Callback("increase_speed_button_clicked")
+     def increase_speed_button_clicked(self, *args):
+-        self.settings.set_int("speed", self.settings.get_int("speed") + 10)
++        if not self.is_srt_mode:
++            self.set_playback_speed(self.settings.get_int("speed") + 10)
+ 
+     @Gtk.Template.Callback("decrease_speed_button_clicked")
+     def decrease_speed_button_clicked(self, *args):
+-        new_speed = self.settings.get_int("speed") - 10
+-        if new_speed <= 40:
+-            new_speed = 40
+-        self.settings.set_int("speed", new_speed)
++        if not self.is_srt_mode:
++            self.set_playback_speed(max(40, self.settings.get_int("speed") - 10))
+ 
+     @Gtk.Template.Callback("paste_button_clicked")
+     def paste_button_clicked(self, *args):
+-        clipboard = Gdk.Display().get_default().get_clipboard()
++        clipboard = Gdk.Display.get_default().get_clipboard()
+ 
+-        def callback(clipboard, res, data):
+-            text = clipboard.read_text_finish(res)
+-            self.text_buffer.set_text(text)
+-            self.add_toast(_("Pasted Clipboard Content"))
++        def callback(clipboard, response, _data):
++            if self._closed:
++                return
++            try:
++                text = clipboard.read_text_finish(response)
++                if text is not None:
++                    self.set_plain_text(text)
++                    self.add_toast(_("Pasted Clipboard Content"))
++            except GLib.Error as error:
++                self.add_toast(str(error))
+ 
+-        data = {}
+-        clipboard.read_text_async(None, callback, data)
++        clipboard.read_text_async(None, callback, None)
+ 
+     @Gtk.Template.Callback("decrease_font_button_clicked")
+     def decrease_font_button_clicked(self, *args):
+@@ -251,14 +479,17 @@ class TeleprompterWindow(Adw.ApplicationWindow):
+ 
+     @Gtk.Template.Callback("fullscreen_button_clicked")
+     def toggle_fullscreen(self, *args):
+-        if self.is_fullscreen():
+-            self.unfullscreen()
+-        else:
+-            self.fullscreen()
++        self.unfullscreen() if self.is_fullscreen() else self.fullscreen()
+ 
+     @Gtk.Template.Callback("on_fullscreened_changed")
+     def on_fullscreened_changed(self, *_args):
+-        if self.is_fullscreen():
+-            self.fullscreen_button.set_icon_name("view-restore-symbolic")
+-        else:
+-            self.fullscreen_button.set_icon_name("view-fullscreen-symbolic")
++        self.fullscreen_button.set_icon_name(
++            "view-restore-symbolic"
++            if self.is_fullscreen()
++            else "view-fullscreen-symbolic"
++        )
++
++    def _on_close_request(self, *_args):
++        self._closed = True
++        self.pause()
++        return False
+diff --git a/tests/test_osc_server.py b/tests/test_osc_server.py
+new file mode 100644
+index 0000000..5d4eb76
+--- /dev/null
++++ b/tests/test_osc_server.py
+@@ -0,0 +1,186 @@
++"""Check that OSC uses the same timed playback operations as the GUI.
++
++The GI stub permits these adapter tests to run without GTK or a UDP socket.
++It does not exercise rendering, the GTK event loop, or the OSC wire format.
++"""
++
++import importlib.util
++import sys
++import types
++import unittest
++from pathlib import Path
++from unittest.mock import Mock, patch
++
++
++def load_osc_module():
++    repository = types.ModuleType("gi.repository")
++    repository.GLib = types.SimpleNamespace()
++    gi = types.ModuleType("gi")
++    gi.repository = repository
++    spec = importlib.util.spec_from_file_location(
++        "teleprompter_osc_under_test",
++        Path(__file__).parents[1] / "src" / "osc_server.py",
++    )
++    module = importlib.util.module_from_spec(spec)
++    with patch.dict(sys.modules, {"gi": gi, "gi.repository": repository}):
++        spec.loader.exec_module(module)
++    return module
++
++
++osc = load_osc_module()
++
++
++class Settings:
++    def __init__(self):
++        self.values = {"speed": 100, "hmirror": False, "vmirror": False}
++
++    def get_int(self, key):
++        return self.values[key]
++
++    def get_boolean(self, key):
++        return self.values[key]
++
++    def set_boolean(self, key, value):
++        self.values[key] = value
++
++
++class OSCPlaybackTests(unittest.TestCase):
++    def setUp(self):
++        self.window = Mock(
++            spec=[
++                "add_toast",
++                "load_file",
++                "set_plain_text",
++                "pause",
++                "play",
++                "reset_playback",
++                "seek_fraction",
++                "set_playback_speed",
++                "set_font_size",
++                "is_fullscreen",
++                "settings",
++                "playing",
++                "is_srt_mode",
++                "playback_fraction",
++                "scroll_text_view",
++            ]
++        )
++        self.window.settings = Settings()
++        self.window.playing = False
++        self.window.is_srt_mode = True
++        self.window.playback_fraction = 0.4
++        self.window.scroll_text_view = types.SimpleNamespace(
++            hmirror=False, vmirror=False
++        )
++        self.window.is_fullscreen.return_value = False
++        self.server = osc.OSCServer(self.window)
++        self.server._send_response = Mock()
++        self.address = ("127.0.0.1", 7401)
++
++    def test_load_uses_the_shared_srt_file_loader(self):
++        self.server.handle_load_file(["lecture.srt"], self.address)
++        self.window.load_file.assert_called_once_with("lecture.srt")
++        self.server._send_response.assert_called_once_with(
++            self.address, "/teleprompter/loaded", "lecture.srt"
++        )
++
++    def test_failed_srt_load_reports_error_instead_of_success(self):
++        self.window.load_file.side_effect = ValueError("Invalid SRT timestamp")
++        self.server.handle_load_file(["broken.srt"], self.address)
++        self.server._send_response.assert_called_once_with(
++            self.address,
++            "/teleprompter/error",
++            "Failed to load file: Invalid SRT timestamp",
++        )
++
++    def test_remote_text_uses_plain_text_mode_transition(self):
++        self.server.handle_set_text(["A fresh script"], self.address)
++        self.window.set_plain_text.assert_called_once_with("A fresh script")
++
++    def test_pause_does_not_toggle_or_change_saved_speed(self):
++        self.window.playing = True
++        self.server.handle_pause([], self.address)
++        self.window.pause.assert_called_once_with()
++        self.window.play.assert_not_called()
++        self.assertEqual(self.window.settings.get_int("speed"), 100)
++
++    def test_repeated_play_cannot_pause_a_running_script(self):
++        self.window.playing = True
++        self.server.handle_play([], self.address)
++        self.window.play.assert_not_called()
++        self.server._send_response.assert_called_once_with(
++            self.address, "/teleprompter/already_playing"
++        )
++
++    def test_stop_resets_timeline_in_both_playback_states(self):
++        for playing in (False, True):
++            with self.subTest(playing=playing):
++                self.window.playing = playing
++                self.window.reset_playback.reset_mock()
++                self.server.handle_stop([], self.address)
++                self.window.reset_playback.assert_called_once_with()
++
++    def test_position_uses_timeline_seek_in_srt_mode(self):
++        self.server.handle_set_position([0.75], self.address)
++        self.window.seek_fraction.assert_called_once_with(0.75)
++
++    def test_invalid_position_never_seeks(self):
++        for position in (-0.1, 1.1, "not a number", None, float("nan")):
++            with self.subTest(position=position):
++                self.server._send_response.reset_mock()
++                self.server.handle_set_position([position], self.address)
++                self.assertEqual(
++                    self.server._send_response.call_args.args[1],
++                    "/teleprompter/error",
++                )
++        self.window.seek_fraction.assert_not_called()
++
++    def test_srt_speed_rejection_preserves_timestamp_pacing(self):
++        self.window.set_playback_speed.side_effect = ValueError(
++            "SRT playback uses its original timestamps"
++        )
++        self.server.handle_set_speed([120], self.address)
++        self.window.set_playback_speed.assert_called_once_with(120.0)
++        self.server._send_response.assert_called_once_with(
++            self.address,
++            "/teleprompter/error",
++            "SRT playback uses its original timestamps",
++        )
++
++    def test_font_size_uses_shared_font_settings_helper(self):
++        self.server.handle_set_fontsize([55], self.address)
++        self.window.set_font_size.assert_called_once_with(55)
++
++    def test_mirror_toggles_persist_through_gsettings(self):
++        for key in ("hmirror", "vmirror"):
++            with self.subTest(key=key):
++                handler = getattr(self.server, f"handle_{key}")
++                handler([True], self.address)
++                self.assertTrue(self.window.settings.get_boolean(key))
++                handler([], self.address)
++                self.assertFalse(self.window.settings.get_boolean(key))
++
++    def test_reset_persists_mirrors_and_resets_the_timeline(self):
++        self.window.settings.set_boolean("hmirror", True)
++        self.window.settings.set_boolean("vmirror", True)
++        self.server.handle_reset([], self.address)
++        self.assertFalse(self.window.settings.get_boolean("hmirror"))
++        self.assertFalse(self.window.settings.get_boolean("vmirror"))
++        self.window.reset_playback.assert_called_once_with()
++
++    def test_status_uses_time_fraction_and_zero_wpm_for_srt(self):
++        for is_srt, expected_speed in ((True, 0), (False, 100)):
++            with self.subTest(is_srt=is_srt):
++                self.window.is_srt_mode = is_srt
++                self.server._send_response.reset_mock()
++                self.server.handle_get_status([], self.address)
++                self.server._send_response.assert_any_call(
++                    self.address, "/teleprompter/status/position", 0.4
++                )
++                self.server._send_response.assert_any_call(
++                    self.address, "/teleprompter/status/speed", expected_speed
++                )
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_srt.py b/tests/test_srt.py
+new file mode 100644
+index 0000000..edbb98e
+--- /dev/null
++++ b/tests/test_srt.py
+@@ -0,0 +1,157 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++
++"""Run with python3 -m unittest discover -s tests (no GTK required)."""
++
++import sys
++import unittest
++from dataclasses import FrozenInstanceError
++from pathlib import Path
++
++# Import the standalone modules without src/__init__.py, which initializes GTK.
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++from srt import (
++    Cue,
++    SubtitleParseError,
++    decode_text,
++    display_text,
++    parse_srt,
++)
++
++
++class SubtitleParsingTests(unittest.TestCase):
++    def test_preserves_unicode_multiline_whitespace_and_literal_markup(self):
++        text = (
++            "\ufeff7\r\n00:00:01,025 --> 00:00:03,999\r\n"
++            "  Grüß Gott — α & <i>hello</i>!  \r\n第二行\r\n\r\n"
++            "9\r\n01:02:03,004 --> 01:02:05,006\r\nLast line"
++        )
++        self.assertEqual(
++            parse_srt(text),
++            (
++                Cue(1025, 3999, "  Grüß Gott — α & <i>hello</i>!  \n第二行"),
++                Cue(3723004, 3725006, "Last line"),
++            ),
++        )
++
++    def test_cues_are_immutable(self):
++        cue = Cue(0, 1000, "word")
++        with self.assertRaises(FrozenInstanceError):
++            cue.text = "changed"
++
++    def test_accepts_no_counter_period_times_and_export_coordinates(self):
++        result = parse_srt(
++            "\n00:00:00.005 --> 00:00:01.050 X1:10 X2:20 Y1:30 Y2:40\n"
++            "A line\n\n\n00:00:02,000 --> 00:00:03,000\nAnother\n\n"
++        )
++        self.assertEqual(result, (Cue(5, 1050, "A line"), Cue(2000, 3000, "Another")))
++
++    def test_preserves_overlapping_cues_and_original_order(self):
++        result = parse_srt(
++            "2\n00:00:02,000 --> 00:00:04,000\nLater\n\n"
++            "1\n00:00:01,000 --> 00:00:03,000\nEarlier"
++        )
++        self.assertEqual(result, (Cue(2000, 4000, "Later"), Cue(1000, 3000, "Earlier")))
++
++    def test_numeric_spoken_line_is_not_a_counter(self):
++        self.assertEqual(
++            parse_srt("1\n00:00:00,000 --> 00:00:01,000\n2026\nnext line")[0].text,
++            "2026\nnext line",
++        )
++
++    def test_invalid_timestamp_has_line_and_cue_diagnostics(self):
++        with self.assertRaises(SubtitleParseError) as caught:
++            parse_srt("42\n00:60:00,000 --> 01:01:00,000\nText")
++        self.assertEqual(caught.exception.line, 2)
++        self.assertEqual(caught.exception.cue_number, 42)
++        self.assertIn("between 00 and 59", str(caught.exception))
++
++    def test_rejects_empty_invalid_and_incomplete_files(self):
++        invalid_files = (
++            "",
++            "\ufeff\n \n",
++            "ordinary text",
++            "1",
++            "1\n",
++            "1\n00:00:00,000 -> 00:00:01,000\nText",
++            "1\n00:00:00,00 --> 00:00:01,000\nText",
++            "1\n00:00:00,000 --> 00:00:01,000\n",
++            "1\n00:00:00,000 --> 00:00:01,000\n \n",
++            "1\n00:00:00,000 --> 00:00:00,000\nText",
++            "1\n00:00:02,000 --> 00:00:01,000\nText",
++            "1\n00:00:00,000 --> 00:00:60,000\nText",
++            "1\n00:00:00,000 --> 00:00:01,000\nText\n\n2\ninvalid\nText",
++        )
++        for text in invalid_files:
++            with self.subTest(text=text), self.assertRaises(SubtitleParseError):
++                parse_srt(text)
++
++    def test_rejects_missing_blank_between_cues(self):
++        with self.assertRaisesRegex(SubtitleParseError, "Missing blank line"):
++            parse_srt(
++                "1\n00:00:00,000 --> 00:00:01,000\nFirst\n"
++                "2\n00:00:02,000 --> 00:00:03,000\nSecond"
++            )
++
++    def test_lone_carriage_return_file(self):
++        self.assertEqual(
++            parse_srt("1\r00:00:00,000 --> 00:00:01,000\rText\r"),
++            (Cue(0, 1000, "Text"),),
++        )
++
++
++class TextDecodingTests(unittest.TestCase):
++    def test_utf8_utf8_bom_and_both_utf16_byte_orders(self):
++        text = "1\n00:00:00,000 --> 00:00:01,000\nÜñîçødé 第二行"
++        variants = (
++            text.encode("utf-8"),
++            text.encode("utf-8-sig"),
++            b"\xff\xfe" + text.encode("utf-16-le"),
++            b"\xfe\xff" + text.encode("utf-16-be"),
++        )
++        for data in variants:
++            with self.subTest(bom=data[:4]):
++                self.assertEqual(decode_text(data), text)
++
++    def test_invalid_encoding_is_rejected_without_replacement_characters(self):
++        invalid_data = (
++            b"\xffinvalid",
++            b"\xff\xfe\x41",  # Truncated UTF-16 code unit.
++            b"\xff\xfe\x00\x00A\x00\x00\x00",  # UTF-32 LE.
++            b"\x00\x00\xfe\xff\x00\x00\x00A",  # UTF-32 BE.
++            b"A\x00B\x00",  # UTF-16 with no BOM, otherwise mistaken for UTF-8.
++        )
++        for data in invalid_data:
++            with self.subTest(data=data), self.assertRaises(SubtitleParseError):
++                decode_text(data)
++
++
++class DisplayTextTests(unittest.TestCase):
++    def test_common_presentational_tags_line_breaks_and_entities(self):
++        text = (
++            "<b>Bold</b> <I>italic</I> <u>underlined</u> <s>struck</s>\n"
++            '<font color="#ff0000" size="24">Grüße</font><br />'
++            "α &amp; β &lt; 3 &gt; 1 &#169; &#x1F642;"
++        )
++        self.assertEqual(
++            display_text(text),
++            "Bold italic underlined struck\nGrüße\nα & β < 3 > 1 © 🙂",
++        )
++
++    def test_preserves_arbitrary_angle_brackets_unknown_tags_and_plain_ampersands(self):
++        text = "2 < 3; x > y; <speaker>Ada</speaker>; <bigger>; &not; A & B; &unknown;"
++        self.assertEqual(
++            display_text(text),
++            "2 < 3; x > y; <speaker>Ada</speaker>; <bigger>; ¬ A & B; &unknown;",
++        )
++        self.assertEqual(display_text("We write &not here"), "We write &not here")
++
++    def test_escaped_tags_remain_literal_and_source_cue_is_unchanged(self):
++        cue = parse_srt(
++            "1\n00:00:00,000 --> 00:00:01,000\n<i>Hello</i> &lt;b&gt;literal&lt;/b&gt;"
++        )[0]
++        self.assertEqual(display_text(cue.text), "Hello <b>literal</b>")
++        self.assertEqual(cue.text, "<i>Hello</i> &lt;b&gt;literal&lt;/b&gt;")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_timeline.py b/tests/test_timeline.py
+new file mode 100644
+index 0000000..67a2686
+--- /dev/null
++++ b/tests/test_timeline.py
+@@ -0,0 +1,288 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++
++"""Deterministic playback checks; no wall-clock waits or GTK required."""
++
++import sys
++import unittest
++from dataclasses import FrozenInstanceError
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++from srt import Cue
++from timeline import SubtitleTimeline
++
++
++class FakeClock:
++    def __init__(self):
++        self.seconds = 10.0
++
++    def __call__(self):
++        return self.seconds
++
++    def advance(self, milliseconds):
++        self.seconds += milliseconds / 1000
++
++
++class SubtitleTimelineTests(unittest.TestCase):
++    def setUp(self):
++        self.clock = FakeClock()
++        self.cues = (Cue(1000, 2500, "First"), Cue(3000, 4000, "Second"))
++        self.timeline = SubtitleTimeline(self.cues, clock=self.clock)
++
++    def test_initial_delay_start_end_and_gap_boundaries(self):
++        expected = (
++            (0, (), 0),
++            (999, (), 0),
++            (1000, (0,), 1),
++            (2499, (0,), 1),
++            (2500, (), 1),
++            (2999, (), 1),
++            (3000, (1,), None),
++            (3999, (1,), None),
++            (4000, (), None),
++        )
++        for position, active, next_index in expected:
++            with self.subTest(position=position):
++                self.timeline.seek(position)
++                self.assertEqual(self.timeline.position_ms, position)
++                self.assertEqual(self.timeline.active_indices, active)
++                self.assertEqual(self.timeline.next_index, next_index)
++
++    def test_snapshot_is_coherent_when_clock_crosses_a_cue_boundary_between_reads(self):
++        class AdvancingClock:
++            def __init__(self):
++                self.seconds = 0.0
++                self.reads = 0
++
++            def __call__(self):
++                current = self.seconds
++                self.seconds += 0.002
++                self.reads += 1
++                return current
++
++        clock = AdvancingClock()
++        timeline = SubtitleTimeline(self.cues, clock=clock)
++        timeline.play()
++        clock.seconds = 0.999
++        reads_before = clock.reads
++        snapshot = timeline.snapshot()
++        self.assertEqual(clock.reads - reads_before, 1)
++        self.assertEqual(snapshot.position_ms, 999)
++        self.assertEqual(snapshot.active_indices, ())
++        self.assertEqual(snapshot.next_index, 0)
++        self.assertTrue(snapshot.playing)
++        # A second sample has crossed the cue start; every field follows it.
++        snapshot = timeline.snapshot()
++        self.assertEqual(snapshot.position_ms, 1001)
++        self.assertEqual(snapshot.active_indices, (0,))
++        self.assertEqual(snapshot.next_index, 1)
++        with self.assertRaises(FrozenInstanceError):
++            snapshot.position_ms = 0
++
++    def test_snapshot_at_end_clears_active_cues_and_reports_stopped(self):
++        self.timeline.play()
++        self.clock.advance(4000)
++        snapshot = self.timeline.snapshot()
++        self.assertEqual(snapshot.position_ms, 4000)
++        self.assertEqual(snapshot.active_indices, ())
++        self.assertIsNone(snapshot.next_index)
++        self.assertFalse(snapshot.playing)
++
++    def test_pause_resume_uses_elapsed_time_not_callback_counts(self):
++        self.timeline.play()
++        self.clock.advance(1234)
++        self.timeline.pause()
++        self.assertEqual(self.timeline.position_ms, 1234)
++        self.assertFalse(self.timeline.playing)
++        self.clock.advance(10000)
++        self.assertEqual(self.timeline.position_ms, 1234)
++        self.timeline.play()
++        self.clock.advance(766)
++        self.assertEqual(self.timeline.position_ms, 2000)
++        self.assertEqual(self.timeline.active_indices, (0,))
++        self.assertTrue(self.timeline.playing)
++
++    def test_delayed_callback_skips_expired_cues_without_drift(self):
++        self.timeline.play()
++        self.clock.advance(3201)
++        self.assertEqual(self.timeline.position_ms, 3201)
++        self.assertEqual(self.timeline.active_indices, (1,))
++        # Reading state repeatedly must not itself advance transport.
++        for _ in range(50):
++            self.assertEqual(self.timeline.position_ms, 3201)
++        self.clock.advance(10000)
++        self.assertEqual(self.timeline.position_ms, 4000)
++        self.assertFalse(self.timeline.playing)
++        self.assertTrue(self.timeline.finished)
++
++    def test_exact_millisecond_after_fractional_anchor(self):
++        self.timeline.play()
++        self.clock.advance(1)
++        self.assertEqual(self.timeline.position_ms, 1)
++        self.clock.advance(998)
++        self.assertEqual(self.timeline.active_indices, ())
++        self.clock.advance(1)
++        self.assertEqual(self.timeline.active_indices, (0,))
++
++    def test_seek_while_playing_reanchors_the_clock(self):
++        self.timeline.play()
++        self.clock.advance(500)
++        self.timeline.seek(3000)
++        self.assertTrue(self.timeline.playing)
++        self.assertEqual(self.timeline.active_indices, (1,))
++        self.clock.advance(200)
++        self.assertEqual(self.timeline.position_ms, 3200)
++        self.timeline.seek(1000)
++        self.clock.advance(123)
++        self.assertEqual(self.timeline.position_ms, 1123)
++
++    def test_seek_preserves_pause_and_clamps_bounds(self):
++        self.timeline.seek(-500)
++        self.assertEqual(self.timeline.position_ms, 0)
++        self.timeline.seek(1500)
++        self.assertFalse(self.timeline.playing)
++        self.clock.advance(2000)
++        self.assertEqual(self.timeline.position_ms, 1500)
++        self.timeline.play()
++        self.timeline.seek(999999)
++        self.assertEqual(self.timeline.position_ms, 4000)
++        self.assertFalse(self.timeline.playing)
++        self.assertTrue(self.timeline.finished)
++
++    def test_play_after_completion_restarts(self):
++        self.timeline.seek(4000)
++        self.timeline.play()
++        self.assertTrue(self.timeline.playing)
++        self.assertEqual(self.timeline.position_ms, 0)
++        self.clock.advance(1000)
++        self.assertEqual(self.timeline.active_indices, (0,))
++
++    def test_repeated_play_does_not_reset_anchor(self):
++        self.timeline.play()
++        self.clock.advance(750)
++        self.timeline.play()
++        self.clock.advance(250)
++        self.assertEqual(self.timeline.position_ms, 1000)
++
++    def test_reset_pauses_at_zero(self):
++        self.timeline.play()
++        self.clock.advance(2000)
++        self.timeline.reset()
++        self.clock.advance(2000)
++        self.assertEqual(self.timeline.position_ms, 0)
++        self.assertFalse(self.timeline.playing)
++        self.assertFalse(self.timeline.finished)
++
++    def test_all_overlapping_cues_and_nonchronological_input(self):
++        timeline = SubtitleTimeline(
++            (
++                Cue(3000, 5000, "Third"),
++                Cue(1000, 6000, "Long first"),
++                Cue(1000, 2500, "Simultaneous first"),
++                Cue(2000, 4000, "Second"),
++            ),
++            clock=self.clock,
++        )
++        self.assertEqual(timeline.duration_ms, 6000)
++        self.assertEqual(timeline.next_index, 1)
++        timeline.seek(1000)
++        self.assertEqual(timeline.active_indices, (1, 2))
++        self.assertEqual(timeline.next_index, 3)
++        timeline.seek(3000)
++        self.assertEqual(timeline.active_indices, (0, 1, 3))
++        self.assertIsNone(timeline.next_index)
++        timeline.seek(4000)
++        self.assertEqual(timeline.active_indices, (0, 1))
++
++    def test_positive_offset_delays_each_cue_and_the_end(self):
++        self.timeline.offset_ms = 500
++        self.assertEqual(self.timeline.duration_ms, 4500)
++        self.assertEqual(self.timeline.active_indices, ())
++        self.assertEqual(self.timeline.next_index, 0)
++        self.timeline.seek(1499)
++        self.assertEqual(self.timeline.active_indices, ())
++        self.timeline.seek(1500)
++        self.assertEqual(self.timeline.active_indices, (0,))
++        self.timeline.seek(4499)
++        self.assertEqual(self.timeline.active_indices, (1,))
++        self.timeline.seek(4500)
++        self.assertEqual(self.timeline.active_indices, ())
++
++    def test_negative_offset_shows_cues_earlier_including_at_zero(self):
++        self.timeline.offset_ms = -1500
++        self.assertEqual(self.timeline.duration_ms, 2500)
++        self.assertEqual(self.timeline.position_ms, 0)
++        self.assertEqual(self.timeline.active_indices, (0,))
++        self.assertEqual(self.timeline.next_index, 1)
++        self.timeline.seek(1500)
++        self.assertEqual(self.timeline.active_indices, (1,))
++        self.timeline.seek(2500)
++        self.assertEqual(self.timeline.active_indices, ())
++
++    def test_offset_change_preserves_transport_and_play_pause_state(self):
++        self.timeline.seek(1500)
++        self.timeline.offset_ms = 1000
++        self.assertEqual(self.timeline.position_ms, 1500)
++        self.assertFalse(self.timeline.playing)
++        self.assertEqual(self.timeline.active_indices, ())
++        self.timeline.play()
++        self.clock.advance(100)
++        self.timeline.offset_ms = -500
++        self.assertEqual(self.timeline.position_ms, 1600)
++        self.assertTrue(self.timeline.playing)
++        self.clock.advance(100)
++        self.assertEqual(self.timeline.position_ms, 1700)
++        self.assertEqual(self.timeline.active_indices, (0,))
++
++    def test_shorter_offset_clamps_and_pauses_at_new_end(self):
++        self.timeline.seek(3500)
++        self.timeline.play()
++        self.timeline.offset_ms = -1000
++        self.assertEqual(self.timeline.duration_ms, 3000)
++        self.assertEqual(self.timeline.position_ms, 3000)
++        self.assertFalse(self.timeline.playing)
++        self.assertTrue(self.timeline.finished)
++
++    def test_offset_before_all_cues_results_in_zero_duration(self):
++        self.timeline.offset_ms = -5000
++        self.assertEqual(self.timeline.duration_ms, 0)
++        self.timeline.play()
++        self.assertFalse(self.timeline.playing)
++        self.assertTrue(self.timeline.finished)
++        self.assertEqual(self.timeline.active_indices, ())
++        self.assertIsNone(self.timeline.next_index)
++
++    def test_reset_retains_offset(self):
++        self.timeline.offset_ms = 500
++        self.timeline.seek(3500)
++        self.timeline.reset()
++        self.assertEqual(self.timeline.position_ms, 0)
++        self.assertEqual(self.timeline.offset_ms, 500)
++
++    def test_empty_timeline_cannot_play(self):
++        timeline = SubtitleTimeline((), clock=self.clock, offset_ms=500)
++        timeline.play()
++        self.assertFalse(timeline.playing)
++        self.assertEqual(timeline.duration_ms, 0)
++        self.assertEqual(timeline.active_indices, ())
++        self.assertIsNone(timeline.next_index)
++
++    def test_long_recording_does_not_accumulate_callback_drift(self):
++        timeline = SubtitleTimeline((Cue(0, 7200000, "Two hours"),), clock=self.clock)
++        timeline.play()
++        self.clock.advance(7199999)
++        self.assertEqual(timeline.position_ms, 7199999)
++        self.assertEqual(timeline.active_indices, (0,))
++        self.clock.advance(1)
++        self.assertEqual(timeline.position_ms, 7200000)
++        self.assertFalse(timeline.playing)
++
++    def test_non_integer_milliseconds_are_rejected(self):
++        with self.assertRaises(TypeError):
++            self.timeline.seek(0.5)
++        with self.assertRaises(TypeError):
++            self.timeline.offset_ms = 0.5
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_window.py b/tests/test_window.py
+new file mode 100644
+index 0000000..c88ad6d
+--- /dev/null
++++ b/tests/test_window.py
+@@ -0,0 +1,468 @@
++# SPDX-License-Identifier: GPL-3.0-or-later
++
++"""Exercise window transport integration without pretending to render GTK.
++
++Small widget doubles emit scale/spin callbacks synchronously, like GTK, so the
++tests cover recursion guards and timer ownership as well as document changes.
++Actual widget construction and Flatpak resources still need a Linux GUI test.
++"""
++
++import importlib.util
++import sys
++import types
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++
++class FakeTemplate:
++    def __init__(self, **kwargs):
++        pass
++
++    def __call__(self, cls):
++        return cls
++
++    @staticmethod
++    def Child():
++        return None
++
++    @staticmethod
++    def Callback(name):
++        return lambda method: method
++
++
++def load_window_module():
++    """Import the real window and transport without executing src/__init__.py."""
++    package_name = "_teleprompter_window_tests"
++    source = Path(__file__).resolve().parents[1] / "src"
++    package = types.ModuleType(package_name)
++    package.__path__ = [str(source)]
++    scroll = types.ModuleType(f"{package_name}.scroll_text_view")
++    scroll.TeleprompterScrollTextView = object
++    repository = types.ModuleType("gi.repository")
++    repository.Gtk = types.SimpleNamespace(Template=FakeTemplate)
++    repository.Adw = types.SimpleNamespace(ApplicationWindow=object)
++    repository.GObject = types.SimpleNamespace(type_register=lambda cls: None)
++    for name in ("Gdk", "Pango", "GLib", "Gio"):
++        setattr(repository, name, types.SimpleNamespace())
++    gi = types.ModuleType("gi")
++    gi.repository = repository
++    spec = importlib.util.spec_from_file_location(
++        f"{package_name}.window", source / "window.py"
++    )
++    module = importlib.util.module_from_spec(spec)
++    with patch.dict(
++        sys.modules,
++        {
++            "gi": gi,
++            "gi.repository": repository,
++            package_name: package,
++            f"{package_name}.scroll_text_view": scroll,
++            spec.name: module,
++        },
++    ):
++        spec.loader.exec_module(module)
++    return module
++
++
++window_module = load_window_module()
++Timeline = window_module.SubtitleTimeline
++
++
++class Clock:
++    def __init__(self):
++        self.seconds = 10.0
++
++    def __call__(self):
++        return self.seconds
++
++    def advance(self, milliseconds):
++        self.seconds += milliseconds / 1000
++
++
++class Scheduler:
++    def __init__(self):
++        self.sources = {}
++        self.next_id = 1
++
++    def timeout_add(self, interval, callback):
++        source_id = self.next_id
++        self.next_id += 1
++        self.sources[source_id] = (interval, callback)
++        return source_id
++
++    def source_remove(self, source_id):
++        # Removing a source twice is an error worth catching in these tests.
++        del self.sources[source_id]
++
++    def fire(self, source_id):
++        _interval, callback = self.sources[source_id]
++        keep = callback()
++        if not keep:
++            self.sources.pop(source_id, None)
++        return keep
++
++
++class Widget:
++    def __init__(self):
++        self.visible = True
++        self.sensitive = True
++        self.editable = True
++        self.cursor_visible = True
++        self.enabled = True
++        self.label = ""
++        self.icon_name = ""
++
++    def set_visible(self, value):
++        self.visible = value
++
++    def set_sensitive(self, value):
++        self.sensitive = value
++
++    def set_editable(self, value):
++        self.editable = value
++
++    def set_cursor_visible(self, value):
++        self.cursor_visible = value
++
++    def set_enabled(self, value):
++        self.enabled = value
++
++    def set_label(self, value):
++        self.label = value
++
++    def set_icon_name(self, value):
++        self.icon_name = value
++
++
++class Adjustment:
++    def __init__(self, upper=1000, page_size=200):
++        self.value = 0
++        self.upper = upper
++        self.page_size = page_size
++        self.callback = None
++
++    def get_value(self):
++        return self.value
++
++    def set_value(self, value):
++        if self.value != value:
++            self.value = value
++            if self.callback:
++                self.callback(self)
++
++    def get_upper(self):
++        return self.upper
++
++    def get_page_size(self):
++        return self.page_size
++
++    def set_range(self, lower, upper):
++        self.upper = upper
++        self.set_value(max(lower, min(upper, self.value)))
++
++
++class Buffer:
++    def __init__(self):
++        self.text = ""
++        self.tags = []
++
++    def set_text(self, text):
++        self.text = text
++        self.tags.clear()
++
++    def apply_tag(self, tag, start, end):
++        self.tags.append((tag, start, end))
++
++    def get_start_iter(self):
++        return 0
++
++    def get_end_iter(self):
++        return len(self.text)
++
++    def get_iter_at_offset(self, offset):
++        return offset
++
++
++class Settings:
++    def __init__(self):
++        self.values = {"speed": 100}
++
++    def get_int(self, key):
++        return self.values[key]
++
++    def set_int(self, key, value):
++        self.values[key] = value
++
++
++SCRIPT = b"""1
++00:00:01,000 --> 00:00:02,000
++First line
++and its continuation.
++
++2
++00:00:03,500 --> 00:00:05,000
++Second line.
++
++3
++00:00:06,500 --> 00:00:08,000
++Last line.
++"""
++
++
++class WindowTransportTests(unittest.TestCase):
++    def setUp(self):
++        self.clock = Clock()
++        self.scheduler = Scheduler()
++        self.glib_patch = patch.object(window_module, "GLib", self.scheduler)
++        self.glib_patch.start()
++        self.addCleanup(self.glib_patch.stop)
++        self.timeline_patch = patch.object(
++            window_module,
++            "SubtitleTimeline",
++            lambda cues: Timeline(cues, clock=self.clock),
++        )
++        self.timeline_patch.start()
++        self.addCleanup(self.timeline_patch.stop)
++
++        self.win = object.__new__(window_module.TeleprompterWindow)
++        self.win.playing = False
++        self.win.timeline = None
++        self.win._playback_source_id = 0
++        self.win._updating_srt_controls = False
++        self.win._rendered_cues = None
++        self.win._closed = False
++        self.win.settings = Settings()
++        self.win.text_buffer = Buffer()
++        self.win.current_cue_tag = "current"
++        self.win.preview_tag = "preview"
++        for name in (
++            "start_button",
++            "title_widget",
++            "increase_speed_button",
++            "decrease_speed_button",
++            "srt_controls",
++            "srt_status",
++            "prompt_text_view",
++        ):
++            setattr(self.win, name, Widget())
++        self.adjustment = Adjustment()
++        self.win.scrolled_window = types.SimpleNamespace(
++            get_vadjustment=lambda: self.adjustment
++        )
++        self.win.srt_seek = Adjustment()
++        self.win.srt_seek.callback = self.win.on_srt_seek_changed
++        self.win.srt_offset = Adjustment()
++        self.win.srt_offset.callback = self.win.on_srt_offset_changed
++        self.actions = {name: Widget() for name in ("previous-cue", "next-cue")}
++        self.win.lookup_action = self.actions.get
++
++    def load_srt(self):
++        self.win.load_document(SCRIPT, "lecture.SRT")
++
++    def test_failed_load_preserves_document_timeline_and_running_source(self):
++        self.load_srt()
++        self.win.play()
++        self.clock.advance(1200)
++        source_id = self.win._playback_source_id
++        timeline = self.win.timeline
++        text = self.win.text_buffer.text
++        for contents, name in (
++            (b"1\ninvalid timestamp\nWrong text", "broken.srt"),
++            (b"\xff\x80bad encoding", "broken.srt"),
++            (b"\xff\x80bad encoding", "broken.txt"),
++        ):
++            with self.subTest(name=name, contents=contents):
++                with self.assertRaises(window_module.SubtitleParseError):
++                    self.win.load_document(contents, name)
++                self.assertIs(self.win.timeline, timeline)
++                self.assertTrue(self.win.playing)
++                self.assertEqual(self.win._playback_source_id, source_id)
++                self.assertEqual(set(self.scheduler.sources), {source_id})
++                self.assertEqual(self.win.text_buffer.text, text)
++                self.assertEqual(self.win.title_widget.label, "lecture.SRT")
++
++    def test_mode_changes_stop_playback_and_restore_plain_text_controls(self):
++        self.win.set_plain_text("Editable script")
++        self.win.play()
++        self.load_srt()
++        self.assertTrue(self.win.is_srt_mode)
++        self.assertFalse(self.win.playing)
++        self.assertFalse(self.scheduler.sources)
++        self.assertTrue(self.win.srt_controls.visible)
++        self.assertFalse(self.win.prompt_text_view.editable)
++        self.assertFalse(self.win.prompt_text_view.cursor_visible)
++        self.assertFalse(self.win.increase_speed_button.sensitive)
++        self.assertFalse(self.win.decrease_speed_button.sensitive)
++        self.assertTrue(all(action.enabled for action in self.actions.values()))
++
++        self.win.play()
++        self.win.set_plain_text("A new script")
++        self.assertFalse(self.win.is_srt_mode)
++        self.assertFalse(self.win.playing)
++        self.assertFalse(self.scheduler.sources)
++        self.assertFalse(self.win.srt_controls.visible)
++        self.assertTrue(self.win.prompt_text_view.editable)
++        self.assertTrue(self.win.prompt_text_view.cursor_visible)
++        self.assertTrue(self.win.increase_speed_button.sensitive)
++        self.assertTrue(self.win.decrease_speed_button.sensitive)
++        self.assertFalse(any(action.enabled for action in self.actions.values()))
++        self.assertEqual(self.win.text_buffer.text, "A new script")
++        self.assertEqual(self.win.settings.get_int("speed"), 100)
++
++    def test_play_pause_resume_restart_own_exactly_one_timeout(self):
++        self.load_srt()
++        self.win.play()
++        first_source = self.win._playback_source_id
++        self.assertEqual(set(self.scheduler.sources), {first_source})
++        self.clock.advance(1250)
++        self.win.play()  # The shared Play/Pause action toggles to pause.
++        self.assertFalse(self.scheduler.sources)
++        self.assertEqual(self.win.timeline.position_ms, 1250)
++        self.clock.advance(5000)
++        self.win.pause()  # Repeated pause must not remove an old source twice.
++        self.assertEqual(self.win.timeline.position_ms, 1250)
++        self.win.play()
++        self.assertNotEqual(self.win._playback_source_id, first_source)
++        self.assertEqual(len(self.scheduler.sources), 1)
++        self.clock.advance(250)
++        self.win.reset_playback()
++        self.assertEqual(self.win.timeline.position_ms, 0)
++        self.assertFalse(self.win.playing)
++        self.assertFalse(self.scheduler.sources)
++
++    def test_close_cancels_timeout_and_freezes_timeline(self):
++        self.load_srt()
++        self.win.play()
++        self.clock.advance(1200)
++        self.assertFalse(self.win._on_close_request())
++        self.assertTrue(self.win._closed)
++        self.assertFalse(self.scheduler.sources)
++        self.assertEqual(self.win.timeline.position_ms, 1200)
++        self.clock.advance(5000)
++        self.assertFalse(self.win._on_playback_tick())
++        self.assertEqual(self.win.timeline.position_ms, 1200)
++
++    def test_seek_end_stops_timeout_and_play_restarts_at_zero(self):
++        self.load_srt()
++        self.win.play()
++        self.win.seek_fraction(1)
++        self.assertEqual(self.win.timeline.position_ms, 8000)
++        self.assertFalse(self.win.playing)
++        self.assertFalse(self.scheduler.sources)
++        self.assertIn("End of script", self.win.srt_status.label)
++        self.win.play()
++        self.assertTrue(self.win.playing)
++        self.assertEqual(self.win.timeline.position_ms, 0)
++        self.assertEqual(len(self.scheduler.sources), 1)
++
++    def test_delayed_tick_renders_current_cue_and_finishes_without_drift(self):
++        self.load_srt()
++        self.win.play()
++        source_id = self.win._playback_source_id
++        self.clock.advance(4000)
++        self.assertTrue(self.scheduler.fire(source_id))
++        self.assertEqual(self.win.timeline.position_ms, 4000)
++        self.assertIn("Second line.", self.win.text_buffer.text)
++        self.assertNotIn("First line", self.win.text_buffer.text)
++        self.clock.advance(5000)
++        self.assertFalse(self.scheduler.fire(source_id))
++        self.assertEqual(self.win.timeline.position_ms, 8000)
++        self.assertFalse(self.win.playing)
++        self.assertEqual(self.win._playback_source_id, 0)
++        self.assertFalse(self.scheduler.sources)
++        self.assertIn("Paused", self.win.srt_status.label)
++
++    def test_fraction_seeks_use_time_for_srt_and_scroll_for_plain_text(self):
++        self.load_srt()
++        self.win.play()
++        self.win.seek_fraction(0.5)
++        self.assertEqual(self.win.timeline.position_ms, 4000)
++        self.assertAlmostEqual(self.win.playback_fraction, 0.5)
++        self.assertTrue(self.win.playing)
++        self.assertEqual(len(self.scheduler.sources), 1)
++        self.win.set_plain_text("Plain text")
++        for fraction, expected in ((0.5, 400), (-1, 0), (2, 800)):
++            with self.subTest(fraction=fraction):
++                self.win.seek_fraction(fraction)
++                self.assertEqual(self.adjustment.get_value(), expected)
++                self.assertEqual(self.win.playback_fraction, expected / 800)
++
++    def test_cue_steps_use_signed_offset_and_preserve_playing_state(self):
++        self.load_srt()
++        self.win.srt_offset.set_value(0.5)
++        self.win.step_cue(1)
++        self.assertEqual(self.win.timeline.position_ms, 1500)
++        self.assertFalse(self.win.playing)
++        self.win.play()
++        self.win.step_cue(1)
++        self.assertEqual(self.win.timeline.position_ms, 4000)
++        self.win.step_cue(1)
++        self.assertEqual(self.win.timeline.position_ms, 7000)
++        self.win.step_cue(-1)
++        self.assertEqual(self.win.timeline.position_ms, 4000)
++        self.assertTrue(self.win.playing)
++        self.assertEqual(len(self.scheduler.sources), 1)
++        self.win.srt_offset.set_value(-0.5)
++        self.win.step_cue(-1)
++        self.assertEqual(self.win.timeline.position_ms, 3000)
++
++    def test_offset_changes_keep_transport_position_and_stop_at_shortened_end(self):
++        self.load_srt()
++        self.win.play()
++        self.clock.advance(1200)
++        self.win.srt_offset.set_value(0.5)
++        self.assertEqual(self.win.timeline.position_ms, 1200)
++        self.assertEqual(self.win.timeline.offset_ms, 500)
++        self.assertEqual(self.win.timeline.active_indices, ())
++        self.assertTrue(self.win.playing)
++        self.win.seek_fraction(0.9)
++        self.win.srt_offset.set_value(-1)
++        self.assertEqual(self.win.timeline.duration_ms, 7000)
++        self.assertEqual(self.win.timeline.position_ms, 7000)
++        self.assertFalse(self.win.playing)
++        self.assertFalse(self.scheduler.sources)
++
++    def test_rendering_scale_changes_do_not_seek_recursively(self):
++        self.load_srt()
++        self.win.timeline.seek(4000)
++        with patch.object(
++            self.win.timeline, "seek", wraps=self.win.timeline.seek
++        ) as seek:
++            self.win._render_srt()
++            seek.assert_not_called()
++            self.assertEqual(self.win.srt_seek.get_value(), 4.0)
++            self.win.srt_seek.set_value(6.5)  # A real user scale change.
++            seek.assert_called_once_with(6500)
++            self.assertFalse(self.win._updating_srt_controls)
++
++    def test_srt_speed_controls_cannot_change_timestamps_or_saved_wpm(self):
++        self.load_srt()
++        self.win.increase_speed_button_clicked()
++        self.win.decrease_speed_button_clicked()
++        with self.assertRaises(ValueError):
++            self.win.set_playback_speed(120)
++        self.assertEqual(self.win.settings.get_int("speed"), 100)
++        self.win.set_plain_text("Plain script")
++        self.win.increase_speed_button_clicked()
++        self.assertEqual(self.win.settings.get_int("speed"), 110)
++
++    def test_render_preserves_multiline_script_and_separates_upcoming_preview(self):
++        self.load_srt()
++        self.win.seek_fraction(0.125)  # First cue starts at exactly 1000 ms.
++        self.assertEqual(
++            self.win.text_buffer.text,
++            "First line\nand its continuation.\n\nUp next\nSecond line.",
++        )
++        current, preview = self.win.text_buffer.tags
++        self.assertEqual(
++            current, ("current", 0, len("First line\nand its continuation."))
++        )
++        self.assertEqual(preview[0], "preview")
++        self.win.seek_fraction(0.25)  # Exact cue end is a gap, not stale wording.
++        self.assertEqual(self.win.text_buffer.text, "Up next\nSecond line.")
++        self.assertIn("Next cue in 00:00:01.500", self.win.srt_status.label)
++
++
++if __name__ == "__main__":
++    unittest.main()

@@ -44,7 +44,7 @@ msgstr "Teleprompter visualizza il testo su un ampio schermo"
 #: data/io.github.nokse22.teleprompter.appdata.xml.in:151
 #| msgid "Teleprompter displaying text on a widescreen"
 msgid "Teleprompter displaying text on a widescreen with dark theme"
-msgstr "Teleprompter visualizza il testo su uno schermo panoramico con tema scuro.
+msgstr "Teleprompter visualizza il testo su uno schermo panoramico con tema scuro."
 
 #: data/io.github.nokse22.teleprompter.appdata.xml.in:156
 msgid "Teleprompter displaying text in a narrow screen"

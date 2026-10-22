@@ -2,6 +2,7 @@ data/io.github.nokse22.teleprompter.desktop.in
 data/io.github.nokse22.teleprompter.appdata.xml.in
 data/io.github.nokse22.teleprompter.gschema.xml
 src/main.py
+src/window.py
 src/gtk/window.blp
 src/gtk/shortcuts.blp
 src/gtk/scroll_text_view.blp

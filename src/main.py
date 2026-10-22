@@ -18,17 +18,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import gettext
 import sys
+from gettext import gettext as _
+from os import path
 
-from gi.repository import Gio, Adw, GLib
-from .window import TeleprompterWindow
+from gi.repository import Adw, Gio, GLib
+
 from .osc_server import OSCServer
 from .preferences import PreferencesDialog
-
-import gettext
-from gettext import gettext as _
-
-from os import path
+from .window import TeleprompterWindow
 
 LOCALE_DIR = path.join(path.dirname(__file__).split("teleprompter")[0], "locale")
 gettext.bindtextdomain("teleprompter", LOCALE_DIR)
@@ -210,6 +209,10 @@ class TeleprompterApplication(Adw.Application):
             # Create window-specific actions after window is created
             self.create_action("play", self.win.play, ["<primary>space"])
             self.create_action("fullscreen", self.win.toggle_fullscreen, ["F11"])
+            self.create_action("open", self.win.open_button_clicked, ["<primary>o"])
+            self.set_accels_for_action("win.restart", ["<primary>Home"])
+            self.set_accels_for_action("win.previous-cue", ["<Alt>Left"])
+            self.set_accels_for_action("win.next-cue", ["<Alt>Right"])
 
             # Auto-start OSC server if enabled in settings
             if self.settings.get_boolean("osc-autostart"):
@@ -221,6 +224,8 @@ class TeleprompterApplication(Adw.Application):
         """Cleanup when application terminates"""
         if self.osc_server:
             self.osc_server.stop()
+        if self.win:
+            self.win.pause()
         Adw.Application.do_shutdown(self)
 
     def on_about_action(self, *args):

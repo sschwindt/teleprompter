@@ -2,6 +2,9 @@ _build/
 builddir/
 .flatpak/
 node_modules/
+__pycache__/
+*.py[cod]
+.ruff_cache/
 
 # local flatpak build
 /repo

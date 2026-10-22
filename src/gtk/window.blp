@@ -183,7 +183,82 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
 
     [scroll-text-view]
     Adw.ToastOverlay overlay {
-      child: $TeleprompterScrollTextView scroll_text_view {
+      child: Box {
+        orientation: vertical;
+
+        $TeleprompterScrollTextView scroll_text_view {
+          vexpand: true;
+        }
+
+        Box srt_controls {
+          visible: false;
+          orientation: vertical;
+          spacing: 6;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 6;
+          margin-bottom: 12;
+
+          Label srt_status {
+            xalign: 0;
+            wrap: true;
+            styles ["caption"]
+          }
+
+          Scale srt_seek {
+            hexpand: true;
+            draw-value: false;
+            tooltip-text: _("Seek in the SRT timeline");
+            adjustment: Adjustment {
+              lower: 0;
+              upper: 1;
+              step-increment: 0.1;
+              page-increment: 1;
+            };
+            value-changed => $srt_seek_changed();
+          }
+
+          Box {
+            spacing: 6;
+
+            Button {
+              icon-name: "media-skip-backward-symbolic";
+              tooltip-text: _("Previous cue (Alt+Left)");
+              action-name: "win.previous-cue";
+            }
+
+            Button {
+              icon-name: "media-seek-backward-symbolic";
+              tooltip-text: _("Restart at 00:00 (Ctrl+Home)");
+              action-name: "win.restart";
+            }
+
+            Button {
+              icon-name: "media-skip-forward-symbolic";
+              tooltip-text: _("Next cue (Alt+Right)");
+              action-name: "win.next-cue";
+            }
+
+            Label {
+              hexpand: true;
+              xalign: 1;
+              label: _("Offset (s)");
+            }
+
+            SpinButton srt_offset {
+              digits: 1;
+              numeric: true;
+              tooltip-text: _("Positive values show cues later; negative values show them earlier");
+              adjustment: Adjustment {
+                lower: -3600;
+                upper: 3600;
+                step-increment: 0.1;
+                page-increment: 1;
+              };
+              value-changed => $srt_offset_changed();
+            }
+          }
+        }
       };
     }
 
@@ -197,7 +272,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
     [start-button]
     Button start_button {
         icon-name: "media-playback-start-symbolic";
-        tooltip-text: _("Start/Stop");
+        tooltip-text: _("Play/Pause (Ctrl+Space)");
         can-target: true;
         valign: center;
         halign: center;
@@ -218,7 +293,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
       margin-end: 6;
       spacing: 6;
 
-      Button {
+      Button increase_speed_button {
         icon-name: "value-increase-symbolic";
         tooltip-text: _("Increase Speed");
 
@@ -229,7 +304,7 @@ template $TeleprompterWindow: Adw.ApplicationWindow {
         clicked => $increase_speed_button_clicked();
       }
 
-      Button {
+      Button decrease_speed_button {
         icon-name: "value-decrease-symbolic";
         tooltip-text: _("Decrease Speed");
 
